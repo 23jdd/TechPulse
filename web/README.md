@@ -1,6 +1,15 @@
 # TechPulse Web Dashboard
 
+[中文说明](README.zh-CN.md)
+
 Open `http://localhost:8080/` or `http://localhost:8080/dashboard` after the gateway is running.
+
+Chinese UI:
+
+```text
+http://localhost:8080/zh
+http://localhost:8080/dashboard/zh
+```
 
 The dashboard is a Tailwind-based static page served by the gateway. It demonstrates the core workflow:
 

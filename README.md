@@ -1,5 +1,7 @@
 # TechPulse
 
+[中文文档](README.zh-CN.md)
+
 TechPulse is a Go-based developer knowledge hub. It turns technical RSS/Atom feeds into a searchable AI knowledge base: fetch articles, clean and deduplicate content, generate summaries/tags/embeddings, index with Bleve, and answer questions with citations.
 
 The intentionally strong MVP path is:
@@ -95,7 +97,7 @@ make demo
 
 ## Web UI
 
-A Tailwind dashboard is served by the gateway at `http://localhost:8080/` and `http://localhost:8080/dashboard`. It provides feed management, article fetch, search, article preview, summary, RAG chat, and daily report generation over the REST API.
+A Tailwind dashboard is served by the gateway at `http://localhost:8080/` and `http://localhost:8080/dashboard`. The Chinese UI is available at `http://localhost:8080/zh` and `http://localhost:8080/dashboard/zh`. It provides feed management, article fetch, search, article preview, summary, RAG chat, and daily report generation over the REST API.
 
 ## Feature Status
 

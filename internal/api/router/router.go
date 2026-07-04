@@ -19,8 +19,14 @@ func New(h *handler.Handler, logger *zap.Logger, defaultUserID int64) http.Handl
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/dashboard.html")
 	})
+	r.Get("/zh", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/dashboard.zh-CN.html")
+	})
 	r.Get("/dashboard", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/dashboard.html")
+	})
+	r.Get("/dashboard/zh", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/dashboard.zh-CN.html")
 	})
 	r.Get("/health", h.Health)
 	r.Get("/metrics", observability.NewMetrics().Handler().ServeHTTP)
