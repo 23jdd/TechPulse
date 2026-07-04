@@ -37,6 +37,8 @@ Direct Docker deployment:
 docker compose up -d --build
 ```
 
+China mainland build proxy defaults are available through `.env`: `GOPROXY=https://goproxy.cn,direct` and `ALPINE_MIRROR=https://mirrors.aliyun.com/alpine`.
+
 Open `http://localhost:8080/login` or `http://localhost:8080/login/zh`.
 
 Start local infrastructure and the gateway:

@@ -3,6 +3,9 @@ name: techpulse
 x-app-build: &app-build
   context: .
   dockerfile: deploy/Dockerfile
+  args:
+    GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+    ALPINE_MIRROR: ${ALPINE_MIRROR:-https://mirrors.aliyun.com/alpine}
 
 x-app-env: &app-env
   APP_ENV: ${APP_ENV:-prod}

@@ -8,6 +8,15 @@
 docker compose up -d --build
 ```
 
+国内网络默认使用这些 Docker 构建代理，可以写在 `.env` 中覆盖：
+
+```env
+GOPROXY=https://goproxy.cn,direct
+ALPINE_MIRROR=https://mirrors.aliyun.com/alpine
+```
+
+如果不想替换 Alpine 源，可以设置 `ALPINE_MIRROR=`。
+
 打开：
 
 ```text

@@ -8,6 +8,15 @@ From the repository root:
 docker compose up -d --build
 ```
 
+For China mainland networks, Docker build uses these defaults from `.env` or `compose.yaml`:
+
+```env
+GOPROXY=https://goproxy.cn,direct
+ALPINE_MIRROR=https://mirrors.aliyun.com/alpine
+```
+
+Set `ALPINE_MIRROR=` to disable Alpine mirror rewriting.
+
 Open:
 
 ```text

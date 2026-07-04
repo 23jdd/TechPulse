@@ -1,4 +1,14 @@
 FROM golang:1.25-alpine AS build
+
+ARG GOPROXY=https://goproxy.cn,direct
+ARG ALPINE_MIRROR=https://mirrors.aliyun.com/alpine
+ENV GOPROXY=${GOPROXY} \
+    GOSUMDB=sum.golang.google.cn
+
+RUN if [ -n "$ALPINE_MIRROR" ]; then \
+      sed -i "s#https://dl-cdn.alpinelinux.org/alpine#$ALPINE_MIRROR#g" /etc/apk/repositories; \
+    fi
+
 WORKDIR /src
 COPY go.mod go.sum* ./
 RUN go mod download
@@ -13,6 +23,12 @@ RUN go build -o /out/gateway ./cmd/gateway \
  && go build -o /out/worker ./cmd/worker
 
 FROM alpine:3.20
+
+ARG ALPINE_MIRROR=https://mirrors.aliyun.com/alpine
+RUN if [ -n "$ALPINE_MIRROR" ]; then \
+      sed -i "s#https://dl-cdn.alpinelinux.org/alpine#$ALPINE_MIRROR#g" /etc/apk/repositories; \
+    fi
+
 RUN apk add --no-cache ca-certificates
 WORKDIR /app
 COPY --from=build /out/ /usr/local/bin/
