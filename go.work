@@ -6,4 +6,5 @@ use (
 	./cmd/techpulse-worker
 	./lib
 	config
+	pkg
 )

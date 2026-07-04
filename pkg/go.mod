@@ -1,8 +1,11 @@
-module techpulse-api
+module pkg
 
 go 1.26.0
 
-require github.com/gin-gonic/gin v1.12.0
+require (
+	github.com/gin-gonic/gin v1.12.0
+	golang.org/x/oauth2 v0.36.0
+)
 
 require (
 	github.com/bytedance/gopkg v0.1.3 // indirect
