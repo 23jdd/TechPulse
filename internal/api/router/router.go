@@ -16,6 +16,12 @@ func New(h *handler.Handler, logger *zap.Logger, defaultUserID int64) http.Handl
 	r := chi.NewRouter()
 	r.Use(chimw.Recoverer)
 	r.Use(middleware.Logging(logger))
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/dashboard.html")
+	})
+	r.Get("/dashboard", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/dashboard.html")
+	})
 	r.Get("/health", h.Health)
 	r.Get("/metrics", observability.NewMetrics().Handler().ServeHTTP)
 	r.Get("/ws", h.WebSocket)

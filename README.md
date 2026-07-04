@@ -95,7 +95,7 @@ make demo
 
 ## Web UI
 
-A lightweight dashboard is available at [web/dashboard.html](web/dashboard.html). Open it in a browser after the gateway is running. It provides feed management, article fetch, search, article preview, summary, and RAG chat over the REST API.
+A Tailwind dashboard is served by the gateway at `http://localhost:8080/` and `http://localhost:8080/dashboard`. It provides feed management, article fetch, search, article preview, summary, RAG chat, and daily report generation over the REST API.
 
 ## Feature Status
 

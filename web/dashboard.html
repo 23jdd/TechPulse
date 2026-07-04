@@ -4,229 +4,204 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TechPulse Dashboard</title>
-  <style>
-    :root {
-      color-scheme: light;
-      --bg: #f6f7f9;
-      --panel: #ffffff;
-      --ink: #17202a;
-      --muted: #667085;
-      --line: #d9dee7;
-      --accent: #0f766e;
-      --accent-dark: #115e59;
-      --warn: #b45309;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: var(--bg);
-      color: var(--ink);
-    }
-    header {
-      height: 64px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 24px;
-      border-bottom: 1px solid var(--line);
-      background: var(--panel);
-    }
-    h1 {
-      font-size: 20px;
-      margin: 0;
-      letter-spacing: 0;
-    }
-    main {
-      display: grid;
-      grid-template-columns: 280px minmax(360px, 1fr) 360px;
-      gap: 16px;
-      padding: 16px;
-      min-height: calc(100vh - 64px);
-    }
-    section {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      min-width: 0;
-      overflow: hidden;
-    }
-    .section-head {
-      min-height: 48px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px 14px;
-      border-bottom: 1px solid var(--line);
-    }
-    h2 {
-      font-size: 14px;
-      margin: 0;
-      letter-spacing: 0;
-    }
-    .body { padding: 14px; }
-    label {
-      display: block;
-      font-size: 12px;
-      color: var(--muted);
-      margin-bottom: 6px;
-    }
-    input, textarea, button {
-      width: 100%;
-      font: inherit;
-      border-radius: 6px;
-    }
-    input, textarea {
-      border: 1px solid var(--line);
-      padding: 9px 10px;
-      margin-bottom: 10px;
-      background: #fff;
-    }
-    textarea {
-      min-height: 88px;
-      resize: vertical;
-    }
-    button {
-      border: 0;
-      background: var(--accent);
-      color: #fff;
-      padding: 9px 10px;
-      cursor: pointer;
-    }
-    button:hover { background: var(--accent-dark); }
-    button.secondary {
-      background: #eef2f6;
-      color: var(--ink);
-      border: 1px solid var(--line);
-    }
-    button.danger {
-      background: #fff1f2;
-      color: #9f1239;
-      border: 1px solid #fecdd3;
-    }
-    .row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 8px;
-      align-items: start;
-    }
-    .status {
-      color: var(--muted);
-      font-size: 12px;
-      white-space: nowrap;
-    }
-    .feed, .article, .citation {
-      border-bottom: 1px solid var(--line);
-      padding: 12px 14px;
-      cursor: pointer;
-    }
-    .feed:hover, .article:hover { background: #f8fafc; }
-    .feed-title, .article-title {
-      font-size: 14px;
-      font-weight: 650;
-      line-height: 1.35;
-      overflow-wrap: anywhere;
-    }
-    .meta {
-      margin-top: 4px;
-      font-size: 12px;
-      color: var(--muted);
-      overflow-wrap: anywhere;
-    }
-    .toolbar {
-      display: grid;
-      grid-template-columns: 1fr 92px;
-      gap: 8px;
-      padding: 14px;
-      border-bottom: 1px solid var(--line);
-    }
-    .toolbar input { margin: 0; }
-    .actions {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 6px;
-      margin-top: 10px;
-    }
-    .actions button {
-      min-height: 32px;
-      padding: 6px;
-      font-size: 12px;
-    }
-    .summary, .answer {
-      white-space: pre-wrap;
-      line-height: 1.5;
-      font-size: 14px;
-      color: #26313f;
-    }
-    .empty {
-      color: var(--muted);
-      font-size: 13px;
-      padding: 14px;
-    }
-    a { color: var(--accent-dark); }
-    @media (max-width: 980px) {
-      main { grid-template-columns: 1fr; }
-      header { height: auto; align-items: start; gap: 8px; flex-direction: column; padding: 14px 16px; }
-    }
-  </style>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ink: "#17202a",
+            muted: "#667085",
+            line: "#d9dee7",
+            brand: "#0f766e",
+            brandDark: "#115e59"
+          },
+          boxShadow: {
+            panel: "0 1px 2px rgba(15, 23, 42, 0.05)"
+          }
+        }
+      }
+    };
+  </script>
 </head>
-<body>
-  <header>
-    <h1>TechPulse</h1>
-    <div class="status" id="health">checking gateway...</div>
-  </header>
-  <main>
-    <section>
-      <div class="section-head">
-        <h2>RSS Feeds</h2>
-        <button class="secondary" style="width:72px" onclick="loadFeeds()">Refresh</button>
+<body class="min-h-screen bg-[#f6f7f9] text-ink antialiased">
+  <div class="flex min-h-screen">
+    <aside class="hidden w-64 shrink-0 border-r border-line bg-white lg:block">
+      <div class="flex h-16 items-center gap-3 border-b border-line px-5">
+        <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-white">
+          <i data-lucide="activity" class="h-5 w-5"></i>
+        </div>
+        <div>
+          <h1 class="text-base font-semibold leading-tight">TechPulse</h1>
+          <p class="text-xs text-muted">AI dev intelligence</p>
+        </div>
       </div>
-      <div class="body">
-        <label for="feedUrl">Feed URL</label>
-        <input id="feedUrl" value="https://go.dev/blog/feed.atom">
-        <label for="feedTitle">Title</label>
-        <input id="feedTitle" value="Go Blog">
-        <label for="feedInterval">Fetch interval minutes</label>
-        <input id="feedInterval" type="number" min="5" step="5" value="360">
-        <button onclick="addFeed()">Add Feed</button>
-        <div style="height:16px"></div>
-        <label for="githubUrl">GitHub Repository</label>
-        <input id="githubUrl" value="https://github.com/golang/go">
-        <button class="secondary" onclick="fetchGitHubReleases()">Fetch Releases</button>
+      <nav class="space-y-1 px-3 py-4 text-sm">
+        <a href="#sources" class="flex items-center gap-2 rounded-md bg-slate-100 px-3 py-2 font-medium text-ink">
+          <i data-lucide="rss" class="h-4 w-4"></i> Sources
+        </a>
+        <a href="#articles" class="flex items-center gap-2 rounded-md px-3 py-2 text-muted hover:bg-slate-50 hover:text-ink">
+          <i data-lucide="newspaper" class="h-4 w-4"></i> Articles
+        </a>
+        <a href="#assistant" class="flex items-center gap-2 rounded-md px-3 py-2 text-muted hover:bg-slate-50 hover:text-ink">
+          <i data-lucide="sparkles" class="h-4 w-4"></i> AI Workspace
+        </a>
+        <a href="#reports" class="flex items-center gap-2 rounded-md px-3 py-2 text-muted hover:bg-slate-50 hover:text-ink">
+          <i data-lucide="mail" class="h-4 w-4"></i> Reports
+        </a>
+      </nav>
+      <div class="mx-4 mt-4 rounded-lg border border-line bg-slate-50 p-3">
+        <p class="text-xs font-medium text-muted">Gateway</p>
+        <p id="health" class="mt-1 text-sm font-semibold text-ink">checking...</p>
       </div>
-      <div id="feeds"></div>
-    </section>
+    </aside>
 
-    <section>
-      <div class="section-head">
-        <h2>Articles</h2>
-        <button class="secondary" style="width:88px" onclick="loadArticles()">Reload</button>
-      </div>
-      <div class="toolbar">
-        <input id="query" placeholder="Search articles" value="go" onkeydown="if(event.key==='Enter') searchArticles()">
-        <button onclick="searchArticles()">Search</button>
-      </div>
-      <div id="articles"></div>
-    </section>
+    <div class="min-w-0 flex-1">
+      <header class="sticky top-0 z-20 flex min-h-16 flex-col gap-3 border-b border-line bg-white/95 px-4 py-3 backdrop-blur md:flex-row md:items-center md:justify-between md:px-6">
+        <div>
+          <p class="text-xs font-medium uppercase tracking-wide text-muted">Developer Knowledge Hub</p>
+          <h2 class="text-xl font-semibold tracking-normal text-ink">Ingest, search, summarize, and ask over technical signals</h2>
+        </div>
+        <div class="grid grid-cols-2 gap-2 sm:flex">
+          <button onclick="loadDashboard()" class="inline-flex items-center justify-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm font-medium text-ink hover:bg-slate-50">
+            <i data-lucide="gauge" class="h-4 w-4"></i> Metrics
+          </button>
+          <button onclick="loadArticles()" class="inline-flex items-center justify-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brandDark">
+            <i data-lucide="refresh-cw" class="h-4 w-4"></i> Refresh
+          </button>
+        </div>
+      </header>
 
-    <section>
-      <div class="section-head">
-        <h2>AI Summary & Chat</h2>
-      </div>
-      <div class="body">
-        <div id="selected" class="meta">Select an article to view summary.</div>
-        <p id="summary" class="summary"></p>
-        <label for="question">Ask over collected articles</label>
-        <textarea id="question">What changed recently in Go?</textarea>
-        <button onclick="ask()">Ask</button>
-        <p id="answer" class="answer"></p>
-        <div id="citations"></div>
-      </div>
-    </section>
-  </main>
+      <main class="grid gap-4 p-4 xl:grid-cols-[360px_minmax(460px,1fr)_400px] md:p-6">
+        <section id="sources" class="space-y-4">
+          <div class="rounded-lg border border-line bg-white shadow-panel">
+            <div class="flex items-center justify-between border-b border-line px-4 py-3">
+              <div>
+                <h3 class="text-sm font-semibold">Sources</h3>
+                <p class="text-xs text-muted">RSS feeds and GitHub releases</p>
+              </div>
+              <button onclick="loadFeeds()" title="Refresh sources" class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-line bg-white text-muted hover:bg-slate-50 hover:text-ink">
+                <i data-lucide="rotate-cw" class="h-4 w-4"></i>
+              </button>
+            </div>
+            <div class="space-y-3 p-4">
+              <label class="block text-xs font-medium text-muted" for="feedUrl">Feed URL</label>
+              <input id="feedUrl" class="w-full rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" value="https://go.dev/blog/feed.atom">
+              <div class="grid grid-cols-[1fr_96px] gap-2">
+                <div>
+                  <label class="block text-xs font-medium text-muted" for="feedTitle">Title</label>
+                  <input id="feedTitle" class="mt-1 w-full rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" value="Go Blog">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-muted" for="feedInterval">Minutes</label>
+                  <input id="feedInterval" type="number" min="5" step="5" class="mt-1 w-full rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" value="360">
+                </div>
+              </div>
+              <button onclick="addFeed()" class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brandDark">
+                <i data-lucide="plus" class="h-4 w-4"></i> Add Feed
+              </button>
+            </div>
+            <div class="border-t border-line p-4">
+              <label class="block text-xs font-medium text-muted" for="githubUrl">GitHub Repository</label>
+              <input id="githubUrl" class="mt-1 w-full rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" value="https://github.com/golang/go">
+              <button onclick="fetchGitHubReleases()" class="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm font-medium text-ink hover:bg-slate-50">
+                <i data-lucide="github" class="h-4 w-4"></i> Fetch Releases
+              </button>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-line bg-white shadow-panel">
+            <div class="border-b border-line px-4 py-3">
+              <h3 class="text-sm font-semibold">Feed List</h3>
+            </div>
+            <div id="feeds" class="max-h-[520px] overflow-auto"></div>
+          </div>
+        </section>
+
+        <section id="articles" class="space-y-4">
+          <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div class="rounded-lg border border-line bg-white p-4 shadow-panel">
+              <p class="text-xs text-muted">Today</p>
+              <p id="metricToday" class="mt-1 text-2xl font-semibold">-</p>
+            </div>
+            <div class="rounded-lg border border-line bg-white p-4 shadow-panel">
+              <p class="text-xs text-muted">This Week</p>
+              <p id="metricWeek" class="mt-1 text-2xl font-semibold">-</p>
+            </div>
+            <div class="rounded-lg border border-line bg-white p-4 shadow-panel">
+              <p class="text-xs text-muted">Worker</p>
+              <p id="metricWorker" class="mt-1 truncate text-sm font-semibold">-</p>
+            </div>
+            <div class="rounded-lg border border-line bg-white p-4 shadow-panel">
+              <p class="text-xs text-muted">Failed Tasks</p>
+              <p id="metricFailed" class="mt-1 text-2xl font-semibold">-</p>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-line bg-white shadow-panel">
+            <div class="border-b border-line p-4">
+              <div class="grid gap-2 md:grid-cols-[1fr_120px_120px]">
+                <div class="relative">
+                  <i data-lucide="search" class="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted"></i>
+                  <input id="query" class="w-full rounded-md border border-line py-2 pl-9 pr-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" placeholder="Search articles" value="go" onkeydown="if(event.key==='Enter') searchArticles()">
+                </div>
+                <input id="tagFilter" class="rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" placeholder="Tag">
+                <button onclick="searchArticles()" class="inline-flex items-center justify-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brandDark">
+                  <i data-lucide="search" class="h-4 w-4"></i> Search
+                </button>
+              </div>
+            </div>
+            <div id="articleList" class="max-h-[760px] overflow-auto"></div>
+          </div>
+        </section>
+
+        <section id="assistant" class="space-y-4">
+          <div class="rounded-lg border border-line bg-white shadow-panel">
+            <div class="border-b border-line px-4 py-3">
+              <h3 class="text-sm font-semibold">AI Summary</h3>
+            </div>
+            <div class="space-y-3 p-4">
+              <div id="selected" class="rounded-md border border-dashed border-line bg-slate-50 p-3 text-sm text-muted">Select an article to view summary.</div>
+              <p id="summary" class="min-h-28 whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-700"></p>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-line bg-white shadow-panel">
+            <div class="border-b border-line px-4 py-3">
+              <h3 class="text-sm font-semibold">RAG Chat</h3>
+            </div>
+            <div class="space-y-3 p-4">
+              <textarea id="question" class="min-h-28 w-full resize-y rounded-md border border-line px-3 py-2 text-sm leading-6 outline-none focus:border-brand focus:ring-2 focus:ring-brand/10">What changed recently in Go?</textarea>
+              <button onclick="ask()" class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white hover:bg-brandDark">
+                <i data-lucide="send" class="h-4 w-4"></i> Ask
+              </button>
+              <p id="answer" class="whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-700"></p>
+              <div id="citations" class="space-y-2"></div>
+            </div>
+          </div>
+
+          <div id="reports" class="rounded-lg border border-line bg-white shadow-panel">
+            <div class="border-b border-line px-4 py-3">
+              <h3 class="text-sm font-semibold">Daily Report</h3>
+            </div>
+            <div class="space-y-3 p-4">
+              <input id="reportTitle" class="w-full rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" value="TechPulse Daily Report">
+              <button onclick="generateReport()" class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm font-medium text-ink hover:bg-slate-50">
+                <i data-lucide="file-text" class="h-4 w-4"></i> Generate Report
+              </button>
+              <pre id="report" class="max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-slate-50 p-3 text-xs leading-5 text-slate-700"></pre>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div id="toast" class="fixed bottom-4 right-4 hidden max-w-sm rounded-lg border border-line bg-white px-4 py-3 text-sm shadow-lg"></div>
 
   <script>
-    const API = localStorage.getItem("techpulse_api") || "http://localhost:8080";
+    const API = localStorage.getItem("techpulse_api") || window.location.origin || "http://localhost:8080";
 
     async function request(path, options = {}) {
       const res = await fetch(API + path, {
@@ -237,141 +212,229 @@
       return res.json();
     }
 
-    function setHealth(text) {
-      document.getElementById("health").textContent = text;
+    function toast(message, tone = "ok") {
+      const el = document.getElementById("toast");
+      el.className = `fixed bottom-4 right-4 max-w-sm rounded-lg border px-4 py-3 text-sm shadow-lg ${tone === "error" ? "border-rose-200 bg-rose-50 text-rose-800" : "border-line bg-white text-ink"}`;
+      el.textContent = message;
+      setTimeout(() => el.classList.add("hidden"), 3200);
+    }
+
+    function icon() {
+      if (window.lucide) window.lucide.createIcons();
     }
 
     async function checkHealth() {
       try {
         const data = await request("/health");
-        setHealth(`gateway: ${data.status}, redis: ${data.redis}`);
+        document.getElementById("health").textContent = `${data.status} / redis ${data.redis}`;
+      } catch {
+        document.getElementById("health").textContent = "gateway offline";
+      }
+    }
+
+    async function loadDashboard() {
+      try {
+        const data = await request("/api/v1/dashboard");
+        document.getElementById("metricToday").textContent = data.today_new_articles ?? 0;
+        document.getElementById("metricWeek").textContent = data.week_new_articles ?? 0;
+        document.getElementById("metricWorker").textContent = data.worker_status || "-";
+        document.getElementById("metricFailed").textContent = data.failed_tasks ?? 0;
       } catch (err) {
-        setHealth("gateway offline");
+        toast(err.message, "error");
       }
     }
 
     async function addFeed() {
-      const url = document.getElementById("feedUrl").value.trim();
-      const title = document.getElementById("feedTitle").value.trim();
-      const fetch_interval_minutes = Number(document.getElementById("feedInterval").value || 60);
-      await request("/api/v1/rss", {method: "POST", body: JSON.stringify({url, title, category: "Demo", fetch_interval_minutes})});
-      await loadFeeds();
+      try {
+        const url = document.getElementById("feedUrl").value.trim();
+        const title = document.getElementById("feedTitle").value.trim();
+        const fetch_interval_minutes = Number(document.getElementById("feedInterval").value || 60);
+        await request("/api/v1/rss", {method: "POST", body: JSON.stringify({url, title, category: "Demo", fetch_interval_minutes})});
+        toast("Feed added");
+        await loadFeeds();
+      } catch (err) {
+        toast(err.message, "error");
+      }
     }
 
     async function loadFeeds() {
       const box = document.getElementById("feeds");
-      box.innerHTML = `<div class="empty">Loading feeds...</div>`;
+      box.innerHTML = emptyState("Loading feeds...");
       try {
         const data = await request("/api/v1/rss");
         box.innerHTML = "";
-        for (const feed of data.items || []) {
-          const el = document.createElement("div");
-          el.className = "feed";
-          el.innerHTML = `
-            <div class="feed-title">${escapeHtml(feed.title || feed.url)}</div>
-            <div class="meta">${escapeHtml(feed.url)}</div>
-            <div class="meta">status: ${escapeHtml(feed.status)} · every ${escapeHtml(feed.fetch_interval_minutes || 60)}m</div>
-            <div class="actions">
-              <button onclick="event.stopPropagation(); fetchFeed(${feed.id})">Fetch</button>
-              <button class="secondary" onclick="event.stopPropagation(); testFeed(${feed.id})">Test</button>
-              <button class="secondary" onclick="event.stopPropagation(); toggleFeed(${feed.id}, '${feed.status === "disabled" ? "enable" : "disable"}')">${feed.status === "disabled" ? "Enable" : "Disable"}</button>
-              <button class="danger" onclick="event.stopPropagation(); deleteFeed(${feed.id})">Delete</button>
-            </div>`;
-          el.onclick = () => fetchFeed(feed.id);
-          box.appendChild(el);
-        }
-        if (!box.children.length) box.innerHTML = `<div class="empty">No feeds yet.</div>`;
+        for (const feed of data.items || []) box.appendChild(feedRow(feed));
+        if (!box.children.length) box.innerHTML = emptyState("No feeds yet.");
+        icon();
       } catch (err) {
-        box.innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
+        box.innerHTML = emptyState(err.message);
       }
     }
 
+    function feedRow(feed) {
+      const el = document.createElement("div");
+      el.className = "border-b border-line p-4 hover:bg-slate-50";
+      const statusClass = feed.status === "disabled" ? "bg-slate-100 text-muted" : "bg-emerald-50 text-emerald-700";
+      el.innerHTML = `
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="truncate text-sm font-semibold">${escapeHtml(feed.title || feed.url)}</p>
+            <p class="mt-1 break-all text-xs text-muted">${escapeHtml(feed.url)}</p>
+            <div class="mt-2 flex flex-wrap gap-2 text-xs">
+              <span class="rounded-full px-2 py-1 ${statusClass}">${escapeHtml(feed.status || "active")}</span>
+              <span class="rounded-full bg-slate-100 px-2 py-1 text-muted">${escapeHtml(feed.fetch_interval_minutes || 60)}m</span>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3 grid grid-cols-4 gap-2">
+          ${smallButton("download", "Fetch", `fetchFeed(${feed.id})`)}
+          ${smallButton("test-tube", "Test", `testFeed(${feed.id})`, "secondary")}
+          ${smallButton(feed.status === "disabled" ? "play" : "pause", feed.status === "disabled" ? "On" : "Off", `toggleFeed(${feed.id}, '${feed.status === "disabled" ? "enable" : "disable"}')`, "secondary")}
+          ${smallButton("trash-2", "Del", `deleteFeed(${feed.id})`, "danger")}
+        </div>`;
+      return el;
+    }
+
     async function fetchFeed(id) {
-      const data = await request(`/api/v1/rss/${id}/fetch`, {method: "POST"});
-      alert(`Fetched ${data.fetched}, inserted ${data.inserted}, duplicates ${data.duplicates}`);
-      await loadArticles();
+      try {
+        const data = await request(`/api/v1/rss/${id}/fetch`, {method: "POST"});
+        toast(`Fetched ${data.fetched}, inserted ${data.inserted}, duplicates ${data.duplicates}`);
+        await loadArticles();
+        await loadDashboard();
+      } catch (err) {
+        toast(err.message, "error");
+      }
     }
 
     async function testFeed(id) {
-      const data = await request(`/api/v1/rss/${id}/test`, {method: "POST"});
-      alert(`Feed ok: ${data.ok}, items: ${data.fetched}, duration: ${data.duration}`);
+      try {
+        const data = await request(`/api/v1/rss/${id}/test`, {method: "POST"});
+        toast(`Feed ok: ${data.ok}, items: ${data.fetched}, ${data.duration}`);
+      } catch (err) {
+        toast(err.message, "error");
+      }
     }
 
     async function toggleFeed(id, action) {
-      await request(`/api/v1/rss/${id}/${action}`, {method: "POST"});
-      await loadFeeds();
+      try {
+        await request(`/api/v1/rss/${id}/${action}`, {method: "POST"});
+        await loadFeeds();
+      } catch (err) {
+        toast(err.message, "error");
+      }
     }
 
     async function deleteFeed(id) {
-      await request(`/api/v1/rss/${id}`, {method: "DELETE"});
-      await loadFeeds();
+      try {
+        await request(`/api/v1/rss/${id}`, {method: "DELETE"});
+        await loadFeeds();
+      } catch (err) {
+        toast(err.message, "error");
+      }
     }
 
     async function fetchGitHubReleases() {
-      const url = document.getElementById("githubUrl").value.trim();
-      const data = await request("/api/v1/github/releases/fetch", {method: "POST", body: JSON.stringify({url})});
-      alert(`GitHub releases fetched ${data.fetched}, inserted ${data.inserted}, duplicates ${data.duplicates}`);
-      await loadArticles();
+      try {
+        const url = document.getElementById("githubUrl").value.trim();
+        const data = await request("/api/v1/github/releases/fetch", {method: "POST", body: JSON.stringify({url})});
+        toast(`GitHub releases: ${data.inserted} inserted, ${data.duplicates} duplicates`);
+        await loadArticles();
+        await loadDashboard();
+      } catch (err) {
+        toast(err.message, "error");
+      }
     }
 
     async function loadArticles() {
-      const box = document.getElementById("articles");
-      box.innerHTML = `<div class="empty">Loading articles...</div>`;
+      const box = document.getElementById("articleList");
+      box.innerHTML = emptyState("Loading articles...");
       try {
-        const data = await request("/api/v1/articles?page_size=20");
+        const data = await request("/api/v1/articles?page_size=30");
         renderArticles(data.items || []);
       } catch (err) {
-        box.innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
+        box.innerHTML = emptyState(err.message);
       }
     }
 
     async function searchArticles() {
       const q = encodeURIComponent(document.getElementById("query").value.trim());
-      const data = await request(`/api/v1/search?q=${q}&page_size=20`);
-      renderArticles((data.hits || []).map(hit => ({id: hit.id, title: hit.title, url: hit.url, author: hit.author})));
+      const tag = encodeURIComponent(document.getElementById("tagFilter").value.trim());
+      const suffix = tag ? `&tag=${tag}` : "";
+      try {
+        const data = await request(`/api/v1/search?q=${q}${suffix}&page_size=30`);
+        renderArticles((data.hits || []).map(hit => ({id: hit.id, title: hit.title, url: hit.url, author: hit.author, summary: hit.summary, tags: hit.tags})));
+      } catch (err) {
+        document.getElementById("articleList").innerHTML = emptyState(err.message);
+      }
     }
 
     function renderArticles(items) {
-      const box = document.getElementById("articles");
+      const box = document.getElementById("articleList");
       box.innerHTML = "";
-      for (const article of items) {
-        const el = document.createElement("div");
-        el.className = "article";
-        el.innerHTML = `
-          <div class="article-title">${escapeHtml(article.title || "Untitled")}</div>
-          <div class="meta">${escapeHtml(article.url || "")}</div>
-          <div class="actions">
-            <button class="secondary" onclick="event.stopPropagation(); markRead(${article.id})">Read</button>
-            <button class="secondary" onclick="event.stopPropagation(); favoriteArticle(${article.id})">Favorite</button>
-            <button class="secondary" onclick="event.stopPropagation(); archiveArticle(${article.id})">Archive</button>
-            <button class="danger" onclick="event.stopPropagation(); deleteArticle(${article.id})">Delete</button>
-          </div>`;
-        el.onclick = () => showArticle(article.id, article.title, article.url);
-        box.appendChild(el);
-      }
-      if (!box.children.length) box.innerHTML = `<div class="empty">No articles found.</div>`;
+      for (const article of items) box.appendChild(articleRow(article));
+      if (!box.children.length) box.innerHTML = emptyState("No articles found.");
+      icon();
+    }
+
+    function articleRow(article) {
+      const el = document.createElement("article");
+      el.className = "border-b border-line p-4 hover:bg-slate-50";
+      el.innerHTML = `
+        <button class="block w-full text-left" onclick="showArticle(${article.id}, '${escapeJs(article.title || "")}', '${escapeJs(article.url || "")}')">
+          <h4 class="line-clamp-2 text-sm font-semibold leading-6">${escapeHtml(article.title || "Untitled")}</h4>
+          <p class="mt-1 break-all text-xs text-muted">${escapeHtml(article.url || "")}</p>
+          ${article.summary ? `<p class="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">${escapeHtml(article.summary)}</p>` : ""}
+        </button>
+        <div class="mt-3 grid grid-cols-4 gap-2">
+          ${smallButton("check", "Read", `markRead(${article.id})`, "secondary")}
+          ${smallButton("star", "Save", `favoriteArticle(${article.id})`, "secondary")}
+          ${smallButton("archive", "Hide", `archiveArticle(${article.id})`, "secondary")}
+          ${smallButton("trash-2", "Del", `deleteArticle(${article.id})`, "danger")}
+        </div>`;
+      return el;
     }
 
     async function markRead(id) {
-      await request(`/api/v1/articles/${id}/read`, {method: "POST"});
+      try {
+        await request(`/api/v1/articles/${id}/read`, {method: "POST"});
+        toast("Marked as read");
+      } catch (err) {
+        toast(err.message, "error");
+      }
     }
 
     async function favoriteArticle(id) {
-      await request(`/api/v1/articles/${id}/favorite`, {method: "POST"});
+      try {
+        await request(`/api/v1/articles/${id}/favorite`, {method: "POST"});
+        toast("Saved to favorites");
+      } catch (err) {
+        toast(err.message, "error");
+      }
     }
 
     async function archiveArticle(id) {
-      await request(`/api/v1/articles/${id}/archive`, {method: "POST"});
-      await loadArticles();
+      try {
+        await request(`/api/v1/articles/${id}/archive`, {method: "POST"});
+        toast("Archived");
+        await loadArticles();
+      } catch (err) {
+        toast(err.message, "error");
+      }
     }
 
     async function deleteArticle(id) {
-      await request(`/api/v1/articles/${id}`, {method: "DELETE"});
-      await loadArticles();
+      try {
+        await request(`/api/v1/articles/${id}`, {method: "DELETE"});
+        toast("Article deleted");
+        await loadArticles();
+        await loadDashboard();
+      } catch (err) {
+        toast(err.message, "error");
+      }
     }
 
     async function showArticle(id, title, url) {
-      document.getElementById("selected").innerHTML = `<strong>${escapeHtml(title || "")}</strong><br><a href="${escapeAttr(url || "#")}" target="_blank">${escapeHtml(url || "")}</a>`;
+      document.getElementById("selected").innerHTML = `<p class="font-medium text-ink">${escapeHtml(title)}</p><a class="mt-1 block break-all text-xs text-brandDark" href="${escapeAttr(url || "#")}" target="_blank">${escapeHtml(url || "")}</a>`;
       document.getElementById("summary").textContent = "Loading summary...";
       try {
         const data = await request(`/api/v1/articles/${id}/summary`);
@@ -384,15 +447,17 @@
     async function ask() {
       document.getElementById("answer").textContent = "Thinking...";
       document.getElementById("citations").innerHTML = "";
-      const question = document.getElementById("question").value.trim();
       try {
+        const question = document.getElementById("question").value.trim();
         const data = await request("/api/v1/chat", {method: "POST", body: JSON.stringify({question})});
         document.getElementById("answer").textContent = data.answer || "";
         const citations = document.getElementById("citations");
         for (const c of data.citations || []) {
-          const el = document.createElement("div");
-          el.className = "citation";
-          el.innerHTML = `<div class="feed-title">${escapeHtml(c.title)}</div><div class="meta"><a href="${escapeAttr(c.url)}" target="_blank">${escapeHtml(c.url)}</a></div>`;
+          const el = document.createElement("a");
+          el.href = c.url;
+          el.target = "_blank";
+          el.className = "block rounded-md border border-line bg-white p-3 text-sm hover:bg-slate-50";
+          el.innerHTML = `<p class="font-medium">${escapeHtml(c.title)}</p><p class="mt-1 break-all text-xs text-muted">${escapeHtml(c.url)}</p>`;
           citations.appendChild(el);
         }
       } catch (err) {
@@ -400,14 +465,48 @@
       }
     }
 
+    async function generateReport() {
+      document.getElementById("report").textContent = "Generating...";
+      try {
+        const title = document.getElementById("reportTitle").value.trim();
+        const data = await request("/api/v1/daily-reports", {method: "POST", body: JSON.stringify({title})});
+        document.getElementById("report").textContent = data.report?.content || "";
+      } catch (err) {
+        document.getElementById("report").textContent = err.message;
+      }
+    }
+
+    function smallButton(iconName, label, action, tone = "primary") {
+      const base = "inline-flex items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium";
+      const cls = tone === "danger"
+        ? "border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+        : tone === "secondary"
+          ? "border border-line bg-white text-ink hover:bg-slate-50"
+          : "bg-brand text-white hover:bg-brandDark";
+      return `<button onclick="event.stopPropagation(); ${action}" class="${base} ${cls}"><i data-lucide="${iconName}" class="h-3.5 w-3.5"></i><span>${label}</span></button>`;
+    }
+
+    function emptyState(text) {
+      return `<div class="p-6 text-center text-sm text-muted">${escapeHtml(text)}</div>`;
+    }
+
     function escapeHtml(value) {
       return String(value).replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
     }
-    function escapeAttr(value) { return escapeHtml(value); }
+
+    function escapeAttr(value) {
+      return escapeHtml(value);
+    }
+
+    function escapeJs(value) {
+      return String(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\n/g, "\\n").replace(/\r/g, "");
+    }
 
     checkHealth();
+    loadDashboard();
     loadFeeds();
     loadArticles();
+    icon();
   </script>
 </body>
 </html>
