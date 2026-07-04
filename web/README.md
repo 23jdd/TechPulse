@@ -1,3 +1,12 @@
-# TechPulse Web
+# TechPulse Web Dashboard
 
-The Phase 1 MVP exposes the complete REST and WebSocket backend. A dashboard UI can be added here using the API documented in `docs/api.md`.
+Open [dashboard.html](dashboard.html) after the gateway is running.
+
+The dashboard is intentionally static and dependency-free. It calls `http://localhost:8080` by default and demonstrates the core workflow:
+
+- add RSS feed
+- trigger fetch
+- list articles
+- search
+- view summary
+- ask RAG questions with citations

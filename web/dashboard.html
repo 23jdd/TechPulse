@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TechPulse Dashboard</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --ink: #17202a;
+      --muted: #667085;
+      --line: #d9dee7;
+      --accent: #0f766e;
+      --accent-dark: #115e59;
+      --warn: #b45309;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    header {
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    h1 {
+      font-size: 20px;
+      margin: 0;
+      letter-spacing: 0;
+    }
+    main {
+      display: grid;
+      grid-template-columns: 280px minmax(360px, 1fr) 360px;
+      gap: 16px;
+      padding: 16px;
+      min-height: calc(100vh - 64px);
+    }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .section-head {
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    h2 {
+      font-size: 14px;
+      margin: 0;
+      letter-spacing: 0;
+    }
+    .body { padding: 14px; }
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    input, textarea, button {
+      width: 100%;
+      font: inherit;
+      border-radius: 6px;
+    }
+    input, textarea {
+      border: 1px solid var(--line);
+      padding: 9px 10px;
+      margin-bottom: 10px;
+      background: #fff;
+    }
+    textarea {
+      min-height: 88px;
+      resize: vertical;
+    }
+    button {
+      border: 0;
+      background: var(--accent);
+      color: #fff;
+      padding: 9px 10px;
+      cursor: pointer;
+    }
+    button:hover { background: var(--accent-dark); }
+    button.secondary {
+      background: #eef2f6;
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: start;
+    }
+    .status {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .feed, .article, .citation {
+      border-bottom: 1px solid var(--line);
+      padding: 12px 14px;
+      cursor: pointer;
+    }
+    .feed:hover, .article:hover { background: #f8fafc; }
+    .feed-title, .article-title {
+      font-size: 14px;
+      font-weight: 650;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    .meta {
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+    .toolbar {
+      display: grid;
+      grid-template-columns: 1fr 92px;
+      gap: 8px;
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .toolbar input { margin: 0; }
+    .summary, .answer {
+      white-space: pre-wrap;
+      line-height: 1.5;
+      font-size: 14px;
+      color: #26313f;
+    }
+    .empty {
+      color: var(--muted);
+      font-size: 13px;
+      padding: 14px;
+    }
+    a { color: var(--accent-dark); }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      header { height: auto; align-items: start; gap: 8px; flex-direction: column; padding: 14px 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>TechPulse</h1>
+    <div class="status" id="health">checking gateway...</div>
+  </header>
+  <main>
+    <section>
+      <div class="section-head">
+        <h2>RSS Feeds</h2>
+        <button class="secondary" style="width:72px" onclick="loadFeeds()">Refresh</button>
+      </div>
+      <div class="body">
+        <label for="feedUrl">Feed URL</label>
+        <input id="feedUrl" value="https://go.dev/blog/feed.atom">
+        <label for="feedTitle">Title</label>
+        <input id="feedTitle" value="Go Blog">
+        <button onclick="addFeed()">Add Feed</button>
+      </div>
+      <div id="feeds"></div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>Articles</h2>
+        <button class="secondary" style="width:88px" onclick="loadArticles()">Reload</button>
+      </div>
+      <div class="toolbar">
+        <input id="query" placeholder="Search articles" value="go" onkeydown="if(event.key==='Enter') searchArticles()">
+        <button onclick="searchArticles()">Search</button>
+      </div>
+      <div id="articles"></div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <h2>AI Summary & Chat</h2>
+      </div>
+      <div class="body">
+        <div id="selected" class="meta">Select an article to view summary.</div>
+        <p id="summary" class="summary"></p>
+        <label for="question">Ask over collected articles</label>
+        <textarea id="question">What changed recently in Go?</textarea>
+        <button onclick="ask()">Ask</button>
+        <p id="answer" class="answer"></p>
+        <div id="citations"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const API = localStorage.getItem("techpulse_api") || "http://localhost:8080";
+
+    async function request(path, options = {}) {
+      const res = await fetch(API + path, {
+        headers: {"Content-Type": "application/json", ...(options.headers || {})},
+        ...options,
+      });
+      if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+      return res.json();
+    }
+
+    function setHealth(text) {
+      document.getElementById("health").textContent = text;
+    }
+
+    async function checkHealth() {
+      try {
+        const data = await request("/health");
+        setHealth(`gateway: ${data.status}, redis: ${data.redis}`);
+      } catch (err) {
+        setHealth("gateway offline");
+      }
+    }
+
+    async function addFeed() {
+      const url = document.getElementById("feedUrl").value.trim();
+      const title = document.getElementById("feedTitle").value.trim();
+      await request("/api/v1/rss", {method: "POST", body: JSON.stringify({url, title, category: "Demo"})});
+      await loadFeeds();
+    }
+
+    async function loadFeeds() {
+      const box = document.getElementById("feeds");
+      box.innerHTML = `<div class="empty">Loading feeds...</div>`;
+      try {
+        const data = await request("/api/v1/rss");
+        box.innerHTML = "";
+        for (const feed of data.items || []) {
+          const el = document.createElement("div");
+          el.className = "feed";
+          el.innerHTML = `<div class="feed-title">${escapeHtml(feed.title || feed.url)}</div><div class="meta">${escapeHtml(feed.url)}</div><div class="meta">Click to fetch</div>`;
+          el.onclick = () => fetchFeed(feed.id);
+          box.appendChild(el);
+        }
+        if (!box.children.length) box.innerHTML = `<div class="empty">No feeds yet.</div>`;
+      } catch (err) {
+        box.innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    async function fetchFeed(id) {
+      const data = await request(`/api/v1/rss/${id}/fetch`, {method: "POST"});
+      alert(`Fetched ${data.fetched}, inserted ${data.inserted}, duplicates ${data.duplicates}`);
+      await loadArticles();
+    }
+
+    async function loadArticles() {
+      const box = document.getElementById("articles");
+      box.innerHTML = `<div class="empty">Loading articles...</div>`;
+      try {
+        const data = await request("/api/v1/articles?page_size=20");
+        renderArticles(data.items || []);
+      } catch (err) {
+        box.innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    async function searchArticles() {
+      const q = encodeURIComponent(document.getElementById("query").value.trim());
+      const data = await request(`/api/v1/search?q=${q}&page_size=20`);
+      renderArticles((data.hits || []).map(hit => ({id: hit.id, title: hit.title, url: hit.url, author: hit.author})));
+    }
+
+    function renderArticles(items) {
+      const box = document.getElementById("articles");
+      box.innerHTML = "";
+      for (const article of items) {
+        const el = document.createElement("div");
+        el.className = "article";
+        el.innerHTML = `<div class="article-title">${escapeHtml(article.title || "Untitled")}</div><div class="meta">${escapeHtml(article.url || "")}</div>`;
+        el.onclick = () => showArticle(article.id, article.title, article.url);
+        box.appendChild(el);
+      }
+      if (!box.children.length) box.innerHTML = `<div class="empty">No articles found.</div>`;
+    }
+
+    async function showArticle(id, title, url) {
+      document.getElementById("selected").innerHTML = `<strong>${escapeHtml(title || "")}</strong><br><a href="${escapeAttr(url || "#")}" target="_blank">${escapeHtml(url || "")}</a>`;
+      document.getElementById("summary").textContent = "Loading summary...";
+      try {
+        const data = await request(`/api/v1/articles/${id}/summary`);
+        document.getElementById("summary").textContent = data.short_summary || data.tldr || data.one_sentence || "No summary yet.";
+      } catch (err) {
+        document.getElementById("summary").textContent = err.message;
+      }
+    }
+
+    async function ask() {
+      document.getElementById("answer").textContent = "Thinking...";
+      document.getElementById("citations").innerHTML = "";
+      const question = document.getElementById("question").value.trim();
+      try {
+        const data = await request("/api/v1/chat", {method: "POST", body: JSON.stringify({question})});
+        document.getElementById("answer").textContent = data.answer || "";
+        const citations = document.getElementById("citations");
+        for (const c of data.citations || []) {
+          const el = document.createElement("div");
+          el.className = "citation";
+          el.innerHTML = `<div class="feed-title">${escapeHtml(c.title)}</div><div class="meta"><a href="${escapeAttr(c.url)}" target="_blank">${escapeHtml(c.url)}</a></div>`;
+          citations.appendChild(el);
+        }
+      } catch (err) {
+        document.getElementById("answer").textContent = err.message;
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
+    }
+    function escapeAttr(value) { return escapeHtml(value); }
+
+    checkHealth();
+    loadFeeds();
+    loadArticles();
+  </script>
+</body>
+</html>

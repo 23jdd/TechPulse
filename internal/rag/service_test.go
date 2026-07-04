@@ -9,7 +9,7 @@ import (
 	"techpulse/internal/search"
 )
 
-func TestRAGAnswerIncludesCitations(t *testing.T) {
+func TestRAGReturnsCitations(t *testing.T) {
 	engine, err := search.NewBleveEngine(t.TempDir())
 	if err != nil {
 		t.Fatalf("engine: %v", err)

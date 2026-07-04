@@ -2,10 +2,13 @@ package duplicate
 
 import "testing"
 
-func TestHashesAreStable(t *testing.T) {
+func TestURLHashStable(t *testing.T) {
 	if URLHash(" HTTPS://EXAMPLE.COM/a ") != URLHash("https://example.com/a") {
 		t.Fatal("url hash should normalize case and whitespace")
 	}
+}
+
+func TestContentHashStable(t *testing.T) {
 	if ContentHash("hello") == ContentHash("world") {
 		t.Fatal("different content should have different hashes")
 	}

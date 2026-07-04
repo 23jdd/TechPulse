@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 type OpenAICompatibleProvider struct {
+	ProviderName   string
 	BaseURL        string
 	APIKey         string
 	Model          string
@@ -17,10 +19,14 @@ type OpenAICompatibleProvider struct {
 }
 
 func NewOpenAICompatibleProvider(baseURL, apiKey, model string, client *http.Client) *OpenAICompatibleProvider {
-	return &OpenAICompatibleProvider{BaseURL: baseURL, APIKey: apiKey, Model: model, EmbeddingModel: model, Client: client}
+	return &OpenAICompatibleProvider{ProviderName: "openai-compatible", BaseURL: strings.TrimRight(baseURL, "/"), APIKey: apiKey, Model: model, EmbeddingModel: model, Client: client}
 }
 
-func (p *OpenAICompatibleProvider) Name() string { return "openai-compatible" }
+func NewOllamaCompatibleProvider(baseURL, model string, client *http.Client) *OpenAICompatibleProvider {
+	return &OpenAICompatibleProvider{ProviderName: "ollama", BaseURL: strings.TrimRight(baseURL, "/"), Model: model, EmbeddingModel: model, Client: client}
+}
+
+func (p *OpenAICompatibleProvider) Name() string { return p.ProviderName }
 
 func (p *OpenAICompatibleProvider) Summarize(ctx context.Context, content string) (*Summary, error) {
 	answer, err := p.ChatCompletion(ctx, []ChatMessage{{Role: "user", Content: "Summarize this technical article:\n" + content}})
@@ -58,7 +64,9 @@ func (p *OpenAICompatibleProvider) GenerateEmbedding(ctx context.Context, conten
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.APIKey)
+	if p.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+p.APIKey)
+	}
 	resp, err := p.Client.Do(req)
 	if err != nil {
 		return nil, err
@@ -89,7 +97,9 @@ func (p *OpenAICompatibleProvider) ChatCompletion(ctx context.Context, messages 
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.APIKey)
+	if p.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+p.APIKey)
+	}
 	resp, err := p.Client.Do(req)
 	if err != nil {
 		return "", err

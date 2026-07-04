@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestRSSFetcherFetchesAtom(t *testing.T) {
+func TestRSSFetcherFetch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/atom+xml")
 		_, _ = w.Write([]byte(`<?xml version="1.0"?>

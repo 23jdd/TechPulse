@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestMockProvider(t *testing.T) {
+func TestMockProviderSummarize(t *testing.T) {
 	p := NewMockProvider()
 	summary, err := p.Summarize(context.Background(), "Go adds useful testing and toolchain updates.")
 	if err != nil {

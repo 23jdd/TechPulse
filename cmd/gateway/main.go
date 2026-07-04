@@ -7,14 +7,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
 
-	"techpulse/internal/ai"
 	apihandler "techpulse/internal/api/handler"
 	apirouter "techpulse/internal/api/router"
 	"techpulse/internal/config"
@@ -25,6 +23,7 @@ import (
 	"techpulse/internal/pipeline"
 	"techpulse/internal/rag"
 	"techpulse/internal/search"
+	svc "techpulse/internal/service"
 	"techpulse/internal/storage/mysql"
 	redisstore "techpulse/internal/storage/redis"
 	ws "techpulse/internal/websocket"
@@ -72,7 +71,7 @@ func main() {
 	defer bleveEngine.Close()
 
 	client := httpclient.New(cfg.RequestTimeout)
-	provider := aiProvider(cfg, client)
+	provider := svc.AIProvider(cfg, client)
 	engine := search.NewHybridEngine(bleveEngine, provider)
 	hub := ws.NewHub()
 	go hub.Run()
@@ -110,13 +109,6 @@ func main() {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error("shutdown", zap.Error(err))
 	}
-}
-
-func aiProvider(cfg config.Config, client *http.Client) ai.Provider {
-	if strings.EqualFold(cfg.AIProvider, "mock") || cfg.AIAPIKey == "" {
-		return ai.NewMockProvider()
-	}
-	return ai.NewOpenAICompatibleProvider(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIModel, client)
 }
 
 func openDBWithRetry(ctx context.Context, dsn string, timeout time.Duration) (db *sqlx.DB, err error) {

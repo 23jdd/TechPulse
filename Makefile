@@ -1,9 +1,18 @@
 APP=techpulse
 COMPOSE=docker compose -f deploy/docker-compose.yml
 
-.PHONY: dev run run-gateway run-scheduler run-fetcher run-parser run-ai-pipeline run-search run-rag run-worker build test lint docker-up docker-down migrate seed clean
+.PHONY: dev demo run run-gateway run-scheduler run-fetcher run-parser run-ai-pipeline run-search run-rag run-worker build test lint docker-up docker-down migrate seed clean
 
 dev: docker-up migrate seed run
+
+demo:
+	$(COMPOSE) up -d --build mysql redis rabbitmq etcd minio gateway
+	go run ./cmd/worker -mode=migrate
+	go run ./cmd/worker -mode=seed
+	curl http://localhost:8080/health
+	curl -X POST http://localhost:8080/api/v1/rss/1/fetch
+	curl "http://localhost:8080/api/v1/search?q=go"
+	curl -X POST http://localhost:8080/api/v1/chat -H "Content-Type: application/json" -d "{\"question\":\"What changed recently in Go?\",\"conversation_id\":1}"
 
 run:
 	go run ./cmd/gateway

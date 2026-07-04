@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestBleveSearch(t *testing.T) {
+func TestBleveSearchIndexAndQuery(t *testing.T) {
 	engine, err := NewBleveEngine(t.TempDir())
 	if err != nil {
 		t.Fatalf("engine: %v", err)
