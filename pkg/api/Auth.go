@@ -4,6 +4,7 @@ import (
 	"config"
 	"context"
 	"fmt"
+	"lib"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -18,7 +19,7 @@ func InitOAuth(c config.Config) {
 		ClientID:     c.ClientId,
 		ClientSecret: c.ClientSecret,
 		RedirectURL:  fmt.Sprintf("https://%s/callback", c.Domain),
-		Scopes:       []string{"user:email"},
+		Scopes:       []string{"user:email", "read:user"},
 		Endpoint:     github.Endpoint,
 	}
 }
@@ -33,10 +34,14 @@ func Callback(ctx *gin.Context) {
 	}
 	//TODO  Storage token
 	fmt.Println(tokens)
+	client := oauthConfig.Client(context.Background(), tokens)
+	resp, err := client.Get("https://api.github.com/user")
+	defer resp.Body.Close()
+
 }
 
 // Auth Is Generate Redirect
 func Auth(ctx *gin.Context) {
-	url := oauthConfig.AuthCodeURL("state", oauth2.AccessTypeOffline)
-	ctx.Redirect(http.StatusTemporaryRedirect, url)
+	url := oauthConfig.AuthCodeURL(lib.Generate(), oauth2.AccessTypeOffline)
+	ctx.Redirect(http.StatusFound, url)
 }

@@ -13,13 +13,14 @@ const (
 )
 
 type Config struct {
-	Mode         Mode   `yaml:"mode"`
-	Path         string `yaml:"path"`
-	ApiPort      int    `yaml:"api_port"`
-	ApiAddress   string `yaml:"api_address"`
-	ClientId     string `yaml:"client_id"`
-	ClientSecret string `yaml:"client_secret"`
-	Domain       string `yaml:"domain"`
+	Mode           Mode   `yaml:"mode"`
+	Path           string `yaml:"path"`
+	ApiPort        int    `yaml:"api_port"`
+	ApiAddress     string `yaml:"api_address"`
+	ClientId       string `yaml:"client_id"`
+	ClientSecret   string `yaml:"client_secret"`
+	Domain         string `yaml:"domain"`
+	DataSourceName string `yaml:"data_source_name"`
 }
 
 func MustLoadConfig() *Config {
