@@ -1,0 +1,9 @@
+go 1.26.0
+
+use (
+	./cmd/techpulse-api
+	./cmd/techpulse-migrate
+	./cmd/techpulse-worker
+	./lib
+	config
+)

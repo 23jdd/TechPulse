@@ -1,0 +1,14 @@
+bin/
+dist/
+.DS_Store
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+coverage.out
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/shelf/
+Request.md
+
