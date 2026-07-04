@@ -10,6 +10,7 @@ require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/rabbitmq/amqp091-go v1.12.0
+	github.com/redis/go-redis/v9 v9.21.0
 	go.etcd.io/etcd/client/v3 v3.6.13
 	go.uber.org/zap v1.27.0
 )
@@ -37,6 +38,7 @@ require (
 	github.com/blevesearch/zapx/v14 v14.4.2 // indirect
 	github.com/blevesearch/zapx/v15 v15.4.2 // indirect
 	github.com/blevesearch/zapx/v16 v16.2.7 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/coreos/go-semver v0.3.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
@@ -51,6 +53,7 @@ require (
 	go.etcd.io/bbolt v1.4.0 // indirect
 	go.etcd.io/etcd/api/v3 v3.6.13 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.6.13 // indirect
+	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/net v0.54.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect

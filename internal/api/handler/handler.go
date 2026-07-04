@@ -27,6 +27,7 @@ import (
 	"techpulse/internal/report"
 	"techpulse/internal/search"
 	"techpulse/internal/storage/mysql"
+	redisstore "techpulse/internal/storage/redis"
 	ws "techpulse/internal/websocket"
 	"techpulse/pkg/pagination"
 	"techpulse/pkg/response"
@@ -41,16 +42,24 @@ type Handler struct {
 	search    search.SearchEngine
 	rag       *rag.Service
 	ai        ai.Provider
+	cache     *redisstore.Client
 	hub       *ws.Hub
 	logger    *zap.Logger
 }
 
-func New(repo *mysql.Repository, fetcher *fetcher.Service, parser *parser.Service, duplicate *duplicate.Service, pipeline *pipeline.Service, search search.SearchEngine, rag *rag.Service, ai ai.Provider, hub *ws.Hub, logger *zap.Logger) *Handler {
-	return &Handler{repo: repo, fetcher: fetcher, parser: parser, duplicate: duplicate, pipeline: pipeline, search: search, rag: rag, ai: ai, hub: hub, logger: logger}
+func New(repo *mysql.Repository, fetcher *fetcher.Service, parser *parser.Service, duplicate *duplicate.Service, pipeline *pipeline.Service, search search.SearchEngine, rag *rag.Service, ai ai.Provider, cache *redisstore.Client, hub *ws.Hub, logger *zap.Logger) *Handler {
+	return &Handler{repo: repo, fetcher: fetcher, parser: parser, duplicate: duplicate, pipeline: pipeline, search: search, rag: rag, ai: ai, cache: cache, hub: hub, logger: logger}
 }
 
-func (h *Handler) Health(w http.ResponseWriter, _ *http.Request) {
-	response.JSON(w, http.StatusOK, response.Envelope{"status": "ok", "service": "gateway"})
+func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
+	redisStatus := "disabled"
+	if h.cache != nil {
+		redisStatus = "ok"
+		if err := h.cache.Ping(r.Context()); err != nil {
+			redisStatus = "error"
+		}
+	}
+	response.JSON(w, http.StatusOK, response.Envelope{"status": "ok", "service": "gateway", "redis": redisStatus})
 }
 
 func (h *Handler) CreateRSS(w http.ResponseWriter, r *http.Request) {
@@ -68,15 +77,25 @@ func (h *Handler) CreateRSS(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.deleteCache(r, "rss:list:user:"+strconv.FormatInt(feed.UserID, 10))
 	response.JSON(w, http.StatusCreated, feed)
 }
 
 func (h *Handler) ListRSS(w http.ResponseWriter, r *http.Request) {
-	feeds, err := h.repo.ListFeeds(r.Context(), middleware.UserID(r))
+	userID := middleware.UserID(r)
+	key := "rss:list:user:" + strconv.FormatInt(userID, 10)
+	var cached []model.RSSFeed
+	if h.getCache(r, key, &cached) {
+		w.Header().Set("X-Cache", "HIT")
+		response.JSON(w, http.StatusOK, response.Envelope{"items": cached})
+		return
+	}
+	feeds, err := h.repo.ListFeeds(r.Context(), userID)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.setCache(r, key, feeds, 2*time.Minute)
 	response.JSON(w, http.StatusOK, response.Envelope{"items": feeds})
 }
 
@@ -94,6 +113,7 @@ func (h *Handler) DeleteRSS(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.deleteCache(r, "rss:list:user:"+strconv.FormatInt(middleware.UserID(r), 10))
 	response.JSON(w, http.StatusOK, response.Envelope{"deleted": true})
 }
 
@@ -165,6 +185,7 @@ func (h *Handler) fetchFeed(r *http.Request, feedID int64) (*dto.FetchRSSRespons
 			continue
 		}
 		out.Inserted++
+		h.deleteCache(r, "dashboard:v1", "articles:list:page:1:size:20")
 		h.hub.Broadcast(ws.Event{Type: "new_article", Message: enriched.Article.Title, ArticleID: articleID, Time: time.Now()})
 		h.hub.Broadcast(ws.Event{Type: "index_finished", Message: enriched.Article.Title, ArticleID: articleID, Time: time.Now()})
 	}
@@ -175,20 +196,37 @@ func (h *Handler) fetchFeed(r *http.Request, feedID int64) (*dto.FetchRSSRespons
 
 func (h *Handler) ListArticles(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
+	key := fmt.Sprintf("articles:list:page:%d:size:%d", page.Page, page.PageSize)
+	var cached []model.Article
+	if h.getCache(r, key, &cached) {
+		w.Header().Set("X-Cache", "HIT")
+		response.JSON(w, http.StatusOK, response.Envelope{"items": cached, "page": page.Page, "page_size": page.PageSize})
+		return
+	}
 	articles, err := h.repo.ListArticles(r.Context(), page.PageSize, page.Offset)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.setCache(r, key, articles, time.Minute)
 	response.JSON(w, http.StatusOK, response.Envelope{"items": articles, "page": page.Page, "page_size": page.PageSize})
 }
 
 func (h *Handler) GetArticle(w http.ResponseWriter, r *http.Request) {
-	article, err := h.repo.GetArticle(r.Context(), idParam(r, "id"))
+	id := idParam(r, "id")
+	key := "article:" + strconv.FormatInt(id, 10)
+	var cached model.Article
+	if h.getCache(r, key, &cached) {
+		w.Header().Set("X-Cache", "HIT")
+		response.JSON(w, http.StatusOK, cached)
+		return
+	}
+	article, err := h.repo.GetArticle(r.Context(), id)
 	if err != nil {
 		response.Error(w, http.StatusNotFound, "article not found")
 		return
 	}
+	h.setCache(r, key, article, 10*time.Minute)
 	response.JSON(w, http.StatusOK, article)
 }
 
@@ -201,11 +239,20 @@ func (h *Handler) MarkRead(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetArticleSummary(w http.ResponseWriter, r *http.Request) {
-	summary, err := h.repo.GetSummary(r.Context(), idParam(r, "id"))
+	id := idParam(r, "id")
+	key := "summary:" + strconv.FormatInt(id, 10)
+	var cached model.Summary
+	if h.getCache(r, key, &cached) {
+		w.Header().Set("X-Cache", "HIT")
+		response.JSON(w, http.StatusOK, cached)
+		return
+	}
+	summary, err := h.repo.GetSummary(r.Context(), id)
 	if err != nil {
 		response.Error(w, http.StatusNotFound, "summary not found")
 		return
 	}
+	h.setCache(r, key, summary, 10*time.Minute)
 	response.JSON(w, http.StatusOK, summary)
 }
 
@@ -267,14 +314,23 @@ func (h *Handler) ReadingHistory(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
-	result, err := h.search.Search(r.Context(), search.SearchQuery{
+	query := search.SearchQuery{
 		Query: r.URL.Query().Get("q"), Tag: r.URL.Query().Get("tag"), Author: r.URL.Query().Get("author"),
 		Page: page.Page, PageSize: page.PageSize,
-	})
+	}
+	key := fmt.Sprintf("search:q:%s:tag:%s:author:%s:page:%d:size:%d", query.Query, query.Tag, query.Author, query.Page, query.PageSize)
+	var cached search.SearchResult
+	if h.getCache(r, key, &cached) {
+		w.Header().Set("X-Cache", "HIT")
+		response.JSON(w, http.StatusOK, cached)
+		return
+	}
+	result, err := h.search.Search(r.Context(), query)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.setCache(r, key, result, 30*time.Second)
 	response.JSON(w, http.StatusOK, result)
 }
 
@@ -446,11 +502,18 @@ func (h *Handler) ListDailyReports(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
+	var cached mysql.Dashboard
+	if h.getCache(r, "dashboard:v1", &cached) {
+		w.Header().Set("X-Cache", "HIT")
+		response.JSON(w, http.StatusOK, cached)
+		return
+	}
 	dashboard, err := h.repo.Dashboard(r.Context())
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.setCache(r, "dashboard:v1", dashboard, time.Minute)
 	response.JSON(w, http.StatusOK, dashboard)
 }
 
@@ -485,4 +548,34 @@ func randomState() string {
 		return fmt.Sprintf("%d", time.Now().UnixNano())
 	}
 	return hex.EncodeToString(b[:])
+}
+
+func (h *Handler) getCache(r *http.Request, key string, dst any) bool {
+	if h.cache == nil {
+		return false
+	}
+	ok, err := h.cache.GetJSON(r.Context(), key, dst)
+	if err != nil {
+		h.logger.Debug("redis get failed", zap.String("key", key), zap.Error(err))
+		return false
+	}
+	return ok
+}
+
+func (h *Handler) setCache(r *http.Request, key string, value any, ttl time.Duration) {
+	if h.cache == nil {
+		return
+	}
+	if err := h.cache.SetJSON(r.Context(), key, value, ttl); err != nil {
+		h.logger.Debug("redis set failed", zap.String("key", key), zap.Error(err))
+	}
+}
+
+func (h *Handler) deleteCache(r *http.Request, keys ...string) {
+	if h.cache == nil {
+		return
+	}
+	if err := h.cache.Delete(r.Context(), keys...); err != nil {
+		h.logger.Debug("redis delete failed", zap.Strings("keys", keys), zap.Error(err))
+	}
 }

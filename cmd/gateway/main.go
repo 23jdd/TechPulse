@@ -26,6 +26,7 @@ import (
 	"techpulse/internal/rag"
 	"techpulse/internal/search"
 	"techpulse/internal/storage/mysql"
+	redisstore "techpulse/internal/storage/redis"
 	ws "techpulse/internal/websocket"
 	"techpulse/pkg/httpclient"
 )
@@ -54,6 +55,16 @@ func main() {
 		logger.Fatal("ensure default user", zap.Error(err))
 	}
 
+	redisClient := redisstore.New(cfg.RedisAddr)
+	if err := redisClient.Ping(ctx); err != nil {
+		logger.Warn("redis unavailable; cache disabled", zap.String("addr", cfg.RedisAddr), zap.Error(err))
+		_ = redisClient.Close()
+		redisClient = nil
+	} else {
+		defer redisClient.Close()
+		logger.Info("redis connected", zap.String("addr", cfg.RedisAddr))
+	}
+
 	bleveEngine, err := search.NewBleveEngine(cfg.BleveIndexPath)
 	if err != nil {
 		logger.Fatal("open bleve", zap.Error(err))
@@ -78,7 +89,7 @@ func main() {
 	duplicateSvc := duplicate.NewService(repo)
 	pipelineSvc := pipeline.NewService(provider)
 	ragSvc := rag.NewService(rag.NewRetriever(engine), rag.NewGenerator(provider)).WithMemory(repo)
-	handler := apihandler.New(repo, fetchSvc, parserSvc, duplicateSvc, pipelineSvc, engine, ragSvc, provider, hub, logger)
+	handler := apihandler.New(repo, fetchSvc, parserSvc, duplicateSvc, pipelineSvc, engine, ragSvc, provider, redisClient, hub, logger)
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.HTTPPort),

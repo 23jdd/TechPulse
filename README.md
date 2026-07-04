@@ -33,6 +33,7 @@ Phase 2 adds independently runnable HTTP services for fetch, parse, AI processin
 - Hybrid Bleve + embedding reranking
 - Conversation memory for RAG chat
 - MySQL persistence
+- Redis best-effort cache for feeds, articles, summaries, search results, and dashboard data
 - Bleve full-text search with highlights
 - Simple RAG chat with citations
 - WebSocket task events at `/ws`
@@ -104,6 +105,7 @@ Copy `.env.example` or export the variables directly. Important defaults:
 
 - `HTTP_PORT=8080`
 - `MYSQL_DSN=root:password@tcp(localhost:3306)/techpulse?parseTime=true&charset=utf8mb4&multiStatements=true`
+- `REDIS_ADDR=localhost:6379`
 - `AI_PROVIDER=mock`
 - `BLEVE_INDEX_PATH=./data/bleve`
 

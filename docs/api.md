@@ -2,7 +2,7 @@
 
 Base URL: `http://localhost:8080`
 
-- `GET /health`
+- `GET /health` returns gateway and Redis cache status
 - `POST /api/v1/rss` with `{"url":"https://go.dev/blog/feed.atom","title":"Go Blog","category":"Go"}`
 - `GET /api/v1/rss`
 - `POST /api/v1/rss/{id}/fetch`
