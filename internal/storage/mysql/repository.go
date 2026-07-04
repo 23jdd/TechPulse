@@ -1,0 +1,253 @@
+package mysql
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"time"
+
+	"github.com/jmoiron/sqlx"
+
+	"techpulse/internal/model"
+)
+
+type Repository struct {
+	db *sqlx.DB
+}
+
+type StoredArticle struct {
+	Article   model.Article
+	Summary   model.Summary
+	Tags      []string
+	Keywords  []string
+	Embedding model.Embedding
+}
+
+type Dashboard struct {
+	TodayNewArticles int64    `json:"today_new_articles"`
+	WeekNewArticles  int64    `json:"week_new_articles"`
+	PopularTags      []string `json:"popular_tags"`
+	FailedTasks      int64    `json:"failed_tasks"`
+	WorkerStatus     string   `json:"worker_status"`
+	AITokenCost      string   `json:"ai_token_cost"`
+}
+
+func NewRepository(db *sqlx.DB) *Repository {
+	return &Repository{db: db}
+}
+
+func (r *Repository) EnsureDefaultUser(ctx context.Context) error {
+	_, err := r.db.ExecContext(ctx, `
+INSERT INTO users (id, username, email, api_token)
+VALUES (1, 'demo', 'demo@techpulse.local', 'dev-token')
+ON DUPLICATE KEY UPDATE username = VALUES(username)`)
+	return err
+}
+
+func (r *Repository) CreateFeed(ctx context.Context, feed *model.RSSFeed) error {
+	res, err := r.db.ExecContext(ctx, `INSERT INTO rss_feeds (user_id, url, title, category, status) VALUES (?, ?, ?, ?, ?)`,
+		feed.UserID, feed.URL, feed.Title, feed.Category, defaultString(feed.Status, "active"))
+	if err != nil {
+		return err
+	}
+	feed.ID, err = res.LastInsertId()
+	return err
+}
+
+func (r *Repository) ListFeeds(ctx context.Context, userID int64) ([]model.RSSFeed, error) {
+	var feeds []model.RSSFeed
+	err := r.db.SelectContext(ctx, &feeds, `SELECT * FROM rss_feeds WHERE user_id = ? ORDER BY id DESC`, userID)
+	return feeds, err
+}
+
+func (r *Repository) GetFeed(ctx context.Context, id int64) (*model.RSSFeed, error) {
+	var feed model.RSSFeed
+	if err := r.db.GetContext(ctx, &feed, `SELECT * FROM rss_feeds WHERE id = ?`, id); err != nil {
+		return nil, err
+	}
+	return &feed, nil
+}
+
+func (r *Repository) DeleteFeed(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM rss_feeds WHERE id = ?`, id)
+	return err
+}
+
+func (r *Repository) MarkFeedFetched(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE rss_feeds SET last_fetched_at = NOW(), updated_at = NOW() WHERE id = ?`, id)
+	return err
+}
+
+func (r *Repository) ArticleExists(ctx context.Context, urlHash, contentHash string) (bool, error) {
+	var id int64
+	err := r.db.GetContext(ctx, &id, `SELECT id FROM articles WHERE url_hash = ? OR content_hash = ? LIMIT 1`, urlHash, contentHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (r *Repository) StoreArticle(ctx context.Context, stored StoredArticle) (int64, error) {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.ExecContext(ctx, `INSERT INTO articles
+(source_type, source_id, title, url, url_hash, content_hash, author, language, raw_content, clean_content, cover_image, published_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		stored.Article.SourceType, stored.Article.SourceID, stored.Article.Title, stored.Article.URL,
+		stored.Article.URLHash, stored.Article.ContentHash, stored.Article.Author, stored.Article.Language,
+		stored.Article.RawContent, stored.Article.CleanContent, stored.Article.CoverImage, stored.Article.PublishedAt)
+	if err != nil {
+		return 0, err
+	}
+	articleID, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+
+	_, err = tx.ExecContext(ctx, `INSERT INTO summaries
+(article_id, one_sentence, short_summary, long_summary, bullet_points, tldr, language)
+VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		articleID, stored.Summary.OneSentence, stored.Summary.ShortSummary, stored.Summary.LongSummary,
+		stored.Summary.BulletPoints, stored.Summary.TLDR, stored.Summary.Language)
+	if err != nil {
+		return 0, err
+	}
+
+	for _, tag := range stored.Tags {
+		tagID, err := upsertTag(ctx, tx, tag, "topic")
+		if err != nil {
+			return 0, err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT IGNORE INTO article_tags (article_id, tag_id) VALUES (?, ?)`, articleID, tagID); err != nil {
+			return 0, err
+		}
+	}
+	for _, keyword := range stored.Keywords {
+		tagID, err := upsertTag(ctx, tx, keyword, "keyword")
+		if err != nil {
+			return 0, err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT IGNORE INTO article_tags (article_id, tag_id) VALUES (?, ?)`, articleID, tagID); err != nil {
+			return 0, err
+		}
+	}
+
+	_, err = tx.ExecContext(ctx, `INSERT INTO embeddings (article_id, provider, model, vector, dimension) VALUES (?, ?, ?, ?, ?)`,
+		articleID, stored.Embedding.Provider, stored.Embedding.Model, stored.Embedding.Vector, stored.Embedding.Dimension)
+	if err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return articleID, nil
+}
+
+func upsertTag(ctx context.Context, tx *sqlx.Tx, name, kind string) (int64, error) {
+	_, err := tx.ExecContext(ctx, `INSERT INTO tags (name, type) VALUES (?, ?) ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)`, name, kind)
+	if err != nil {
+		return 0, err
+	}
+	var id int64
+	err = tx.GetContext(ctx, &id, `SELECT LAST_INSERT_ID()`)
+	return id, err
+}
+
+func (r *Repository) ListArticles(ctx context.Context, limit, offset int) ([]model.Article, error) {
+	var articles []model.Article
+	err := r.db.SelectContext(ctx, &articles, `SELECT * FROM articles ORDER BY COALESCE(published_at, created_at) DESC LIMIT ? OFFSET ?`, limit, offset)
+	return articles, err
+}
+
+func (r *Repository) GetArticle(ctx context.Context, id int64) (*model.Article, error) {
+	var article model.Article
+	if err := r.db.GetContext(ctx, &article, `SELECT * FROM articles WHERE id = ?`, id); err != nil {
+		return nil, err
+	}
+	return &article, nil
+}
+
+func (r *Repository) GetSummary(ctx context.Context, articleID int64) (*model.Summary, error) {
+	var summary model.Summary
+	if err := r.db.GetContext(ctx, &summary, `SELECT * FROM summaries WHERE article_id = ?`, articleID); err != nil {
+		return nil, err
+	}
+	return &summary, nil
+}
+
+func (r *Repository) TagsForArticle(ctx context.Context, articleID int64) ([]string, error) {
+	var tags []string
+	err := r.db.SelectContext(ctx, &tags, `SELECT t.name FROM tags t JOIN article_tags at ON at.tag_id = t.id WHERE at.article_id = ?`, articleID)
+	return tags, err
+}
+
+func (r *Repository) AddFavorite(ctx context.Context, userID, articleID int64, typ string) error {
+	_, err := r.db.ExecContext(ctx, `INSERT IGNORE INTO favorites (user_id, article_id, type) VALUES (?, ?, ?)`, userID, articleID, defaultString(typ, "favorite"))
+	return err
+}
+
+func (r *Repository) RemoveFavorite(ctx context.Context, userID, articleID int64, typ string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM favorites WHERE user_id = ? AND article_id = ? AND type = ?`, userID, articleID, defaultString(typ, "favorite"))
+	return err
+}
+
+func (r *Repository) Dashboard(ctx context.Context) (*Dashboard, error) {
+	d := &Dashboard{WorkerStatus: "gateway-in-process", AITokenCost: "mock-provider: 0"}
+	_ = r.db.GetContext(ctx, &d.TodayNewArticles, `SELECT COUNT(*) FROM articles WHERE DATE(created_at) = CURRENT_DATE()`)
+	_ = r.db.GetContext(ctx, &d.WeekNewArticles, `SELECT COUNT(*) FROM articles WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)`)
+	_ = r.db.GetContext(ctx, &d.FailedTasks, `SELECT COUNT(*) FROM tasks WHERE status = 'failed'`)
+	_ = r.db.SelectContext(ctx, &d.PopularTags, `SELECT t.name FROM tags t JOIN article_tags at ON at.tag_id = t.id GROUP BY t.id ORDER BY COUNT(*) DESC LIMIT 10`)
+	return d, nil
+}
+
+func (r *Repository) CreateConversation(ctx context.Context, userID int64, title string) (int64, error) {
+	res, err := r.db.ExecContext(ctx, `INSERT INTO conversations (user_id, title) VALUES (?, ?)`, userID, defaultString(title, "TechPulse Chat"))
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (r *Repository) StoreMessage(ctx context.Context, conversationID int64, role, content string, citations any) error {
+	raw, _ := json.Marshal(citations)
+	_, err := r.db.ExecContext(ctx, `INSERT INTO messages (conversation_id, role, content, citations) VALUES (?, ?, ?, ?)`,
+		conversationID, role, content, string(raw))
+	return err
+}
+
+func (r *Repository) SeedFeeds(ctx context.Context, userID int64) error {
+	feeds := []model.RSSFeed{
+		{UserID: userID, URL: "https://go.dev/blog/feed.atom", Title: "Go Blog", Category: "Go", Status: "active"},
+		{UserID: userID, URL: "https://kubernetes.io/feed.xml", Title: "Kubernetes", Category: "Kubernetes", Status: "active"},
+		{UserID: userID, URL: "https://hnrss.org/frontpage", Title: "Hacker News Frontpage", Category: "Tech News", Status: "active"},
+		{UserID: userID, URL: "https://github.blog/feed/", Title: "GitHub Blog", Category: "GitHub", Status: "active"},
+	}
+	for _, feed := range feeds {
+		_, err := r.db.ExecContext(ctx, `INSERT INTO rss_feeds (user_id, url, title, category, status)
+VALUES (?, ?, ?, ?, ?)`, feed.UserID, feed.URL, feed.Title, feed.Category, feed.Status)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func defaultString(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func ptrTime(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}

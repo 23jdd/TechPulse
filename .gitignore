@@ -7,8 +7,11 @@ dist/
 *.so
 *.dylib
 coverage.out
+data/
+.env
 .idea/workspace.xml
 .idea/tasks.xml
 .idea/shelf/
 Request.md
 .idea
+sql

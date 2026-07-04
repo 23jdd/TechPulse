@@ -1,0 +1,139 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: techpulse
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ppassword"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.15
+    command: ["etcd", "--advertise-client-urls=http://0.0.0.0:2379", "--listen-client-urls=http://0.0.0.0:2379"]
+    ports:
+      - "2379:2379"
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["gateway"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+      etcd:
+        condition: service_started
+      minio:
+        condition: service_started
+    environment:
+      HTTP_PORT: 8080
+      MYSQL_DSN: root:password@tcp(mysql:3306)/techpulse?parseTime=true&charset=utf8mb4&multiStatements=true
+      REDIS_ADDR: redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ENDPOINT: minio:9000
+      BLEVE_INDEX_PATH: /app/data/bleve
+      AI_PROVIDER: mock
+    ports:
+      - "8080:8080"
+    volumes:
+      - bleve-data:/app/data
+
+  scheduler:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["scheduler"]
+    ports:
+      - "8081:8081"
+
+  fetcher:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["fetcher"]
+    ports:
+      - "8082:8082"
+
+  parser:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["parser"]
+    ports:
+      - "8083:8083"
+
+  ai-pipeline:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["ai-pipeline"]
+    ports:
+      - "8084:8084"
+
+  search:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["search"]
+    ports:
+      - "8085:8085"
+
+  rag:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["rag"]
+    ports:
+      - "8086:8086"
+
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["worker"]
+    environment:
+      MYSQL_DSN: root:password@tcp(mysql:3306)/techpulse?parseTime=true&charset=utf8mb4&multiStatements=true
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql-data:
+  minio-data:
+  bleve-data:

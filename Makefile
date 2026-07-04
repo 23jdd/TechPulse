@@ -1,18 +1,34 @@
 APP=techpulse
-.PHONY: build run-api run-worker test migrate docker-up docker-down
+COMPOSE=docker compose -f deploy/docker-compose.yml
+
+.PHONY: dev run build test lint docker-up docker-down migrate seed clean
+
+dev: docker-up migrate seed run
+
+run:
+	go run ./cmd/gateway
+
 build:
-	go build -o bin/techpulse-api ./cmd/techpulse-api
-	go build -o bin/techpulse-worker ./cmd/techpulse-worker
-	go build -o bin/techpulse-migrate ./cmd/techpulse-migrate
-run-api:
-	go run ./cmd/techpulse-api
-run-worker:
-	go run ./cmd/techpulse-worker
+	go build ./...
+
 test:
 	go test ./...
-migrate:
-	go run ./cmd/techpulse-migrate
+
+lint:
+	go vet ./...
+
 docker-up:
-	docker compose up -d
+	$(COMPOSE) up -d mysql redis rabbitmq etcd minio
+
 docker-down:
-	docker compose down
+	$(COMPOSE) down
+
+migrate:
+	go run ./cmd/worker -mode=migrate
+
+seed:
+	go run ./cmd/worker -mode=seed
+
+clean:
+	-$(COMPOSE) down -v
+	-$(RM) -r data bin
