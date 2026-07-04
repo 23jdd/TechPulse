@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -31,8 +30,7 @@ func (s *Service) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case at := <-ticker.C:
-			payload, _ := json.Marshal(map[string]any{"scheduled_at": at})
-			_ = s.publisher.Publish(ctx, "fetch", queue.Message{Type: queue.FetchJob, Payload: payload})
+			_ = s.publisher.Publish(ctx, "fetch", queue.Message{Type: queue.FetchJob, Payload: map[string]any{"scheduled_at": at}})
 		}
 	}
 }

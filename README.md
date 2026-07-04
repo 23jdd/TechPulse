@@ -19,6 +19,7 @@ flowchart LR
 ```
 
 Phase 1 runs the real MVP flow in `cmd/gateway` while keeping packages split for the Phase 2 service decomposition.
+Phase 2 adds independently runnable HTTP services for fetch, parse, AI processing, search, RAG, scheduling, and queue workers.
 
 ## Features
 
@@ -33,6 +34,9 @@ Phase 1 runs the real MVP flow in `cmd/gateway` while keeping packages split for
 - Simple RAG chat with citations
 - WebSocket task events at `/ws`
 - Docker Compose for MySQL, Redis, RabbitMQ, etcd, MinIO, and services
+- Standalone microservice endpoints for Phase 2 service-to-service HTTP calls
+- RabbitMQ publisher/consumer implementation for async jobs
+- etcd-backed service registry and distributed lock implementation
 
 ## Run
 
@@ -41,6 +45,18 @@ make docker-up
 make migrate
 make seed
 make run
+```
+
+Run individual services during Phase 2 development:
+
+```bash
+go run ./cmd/scheduler
+go run ./cmd/fetcher
+go run ./cmd/parser
+go run ./cmd/ai-pipeline
+go run ./cmd/search
+go run ./cmd/rag
+go run ./cmd/worker
 ```
 
 Or build the full stack:
@@ -79,13 +95,13 @@ Copy `.env.example` or export the variables directly. Important defaults:
 ## Services
 
 - `cmd/gateway`: REST API, WebSocket, in-process MVP ingestion, search, and RAG.
-- `cmd/scheduler`: scheduler health service and Phase 2 ticker skeleton.
-- `cmd/fetcher`: fetcher health service.
-- `cmd/parser`: parser health service.
-- `cmd/ai-pipeline`: AI pipeline health service.
-- `cmd/search`: search health service.
-- `cmd/rag`: RAG health service.
-- `cmd/worker`: migration, seed, and queue worker skeleton.
+- `cmd/scheduler`: publishes fetch jobs to RabbitMQ and exposes `/schedule/fetch` plus `/tick`.
+- `cmd/fetcher`: exposes `POST /fetch` for RSS and source plugin fetching.
+- `cmd/parser`: exposes `POST /parse` for fetched item parsing.
+- `cmd/ai-pipeline`: exposes `POST /process` for mock/OpenAI-compatible enrichment.
+- `cmd/search`: exposes `POST /index`, `DELETE /index/{id}`, and `/search`.
+- `cmd/rag`: exposes `POST /chat` using Bleve retrieval and AI generation.
+- `cmd/worker`: migration, seed, and RabbitMQ consumer for fetch, parse, AI, index, and daily report queues.
 
 ## Database
 

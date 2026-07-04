@@ -1,5 +1,7 @@
 package queue
 
+import "encoding/json"
+
 type MessageType string
 
 const (
@@ -11,6 +13,7 @@ const (
 )
 
 type Message struct {
-	Type    MessageType `json:"type"`
-	Payload []byte      `json:"payload"`
+	Type    MessageType     `json:"type"`
+	Payload map[string]any  `json:"payload,omitempty"`
+	Raw     json.RawMessage `json:"raw,omitempty"`
 }

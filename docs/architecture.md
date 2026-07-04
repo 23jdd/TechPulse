@@ -17,4 +17,10 @@ flowchart LR
   Gateway --> Dashboard
 ```
 
-Phase 1 runs the real MVP path in the gateway process. The service packages are split so Phase 2 can move scheduler, fetcher, parser, AI pipeline, search, RAG, and worker behind HTTP or RabbitMQ boundaries.
+Phase 1 runs the real MVP path in the gateway process. Phase 2 exposes scheduler, fetcher, parser, AI pipeline, search, RAG, and worker as independently runnable services.
+
+Service communication:
+
+- HTTP: fetcher `/fetch`, parser `/parse`, ai-pipeline `/process`, search `/index` and `/search`, rag `/chat`.
+- RabbitMQ: `fetch`, `parse`, `ai`, `index`, and `daily_report` queues.
+- etcd: service registration under `/techpulse/services/*` and distributed locks under `/techpulse/locks/*`.

@@ -14,13 +14,13 @@ type ArticleSearchDocument struct {
 }
 
 type SearchQuery struct {
-	Query    string
-	Tag      string
-	Author   string
-	DateFrom *time.Time
-	DateTo   *time.Time
-	Page     int
-	PageSize int
+	Query    string     `json:"query"`
+	Tag      string     `json:"tag"`
+	Author   string     `json:"author"`
+	DateFrom *time.Time `json:"date_from,omitempty"`
+	DateTo   *time.Time `json:"date_to,omitempty"`
+	Page     int        `json:"page"`
+	PageSize int        `json:"page_size"`
 }
 
 type SearchHit struct {

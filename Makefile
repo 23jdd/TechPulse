@@ -1,12 +1,36 @@
 APP=techpulse
 COMPOSE=docker compose -f deploy/docker-compose.yml
 
-.PHONY: dev run build test lint docker-up docker-down migrate seed clean
+.PHONY: dev run run-gateway run-scheduler run-fetcher run-parser run-ai-pipeline run-search run-rag run-worker build test lint docker-up docker-down migrate seed clean
 
 dev: docker-up migrate seed run
 
 run:
 	go run ./cmd/gateway
+
+run-gateway:
+	go run ./cmd/gateway
+
+run-scheduler:
+	go run ./cmd/scheduler
+
+run-fetcher:
+	go run ./cmd/fetcher
+
+run-parser:
+	go run ./cmd/parser
+
+run-ai-pipeline:
+	go run ./cmd/ai-pipeline
+
+run-search:
+	go run ./cmd/search
+
+run-rag:
+	go run ./cmd/rag
+
+run-worker:
+	go run ./cmd/worker
 
 build:
 	go build ./...
