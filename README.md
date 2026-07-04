@@ -16,6 +16,7 @@ Most blog projects are CRUD demos. TechPulse shows backend system design around 
 
 - production-style Go package layout
 - real RSS/Atom fetching
+- real GitHub Releases fetching
 - MySQL persistence and Redis caching
 - full-text search with field boosting and highlights
 - pluggable AI provider interface
@@ -49,6 +50,10 @@ curl "http://localhost:8080/api/v1/search?q=go&page=1&page_size=20"
 curl -X POST http://localhost:8080/api/v1/chat \
   -H "Content-Type: application/json" \
   -d '{"question":"What changed recently in Go?","conversation_id":1}'
+
+curl -X POST http://localhost:8080/api/v1/github/releases/fetch \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://github.com/golang/go"}'
 ```
 
 Expected result:
@@ -92,6 +97,7 @@ A lightweight dashboard is available at [web/dashboard.html](web/dashboard.html)
 | Module | Status | Notes |
 | --- | --- | --- |
 | RSS / Atom Fetch | Working | Real HTTP fetch with timeout and user-agent |
+| GitHub Releases | Working | Fetches release title, tag, body, author, published time |
 | Parser / Cleaner | Working | RSS item parsing and simple HTML cleaner |
 | URL / Content Hash Dedup | Working | Stable SHA-256 hashes |
 | Mock AI Summary / Tags / Embedding | Working | Runs without API keys |
@@ -103,7 +109,6 @@ A lightweight dashboard is available at [web/dashboard.html](web/dashboard.html)
 | RAG Chat | Basic Working | Retrieves top articles and returns citations |
 | WebSocket Events | Working | Emits fetch/index/new article events |
 | RabbitMQ / etcd | Partial | Real client implementations, service skeletons |
-| GitHub Releases | Stub | Fetcher interface prepared |
 | Reddit / Arxiv / YouTube | Stub | Fetcher interface prepared |
 | Real GitHub OAuth Callback | Planned | Auth URL is implemented |
 | Kubernetes | Starter | Minimal manifests for deployment shape |
@@ -206,7 +211,7 @@ Read these first when reviewing the project:
 
 ## Known Limitations
 
-- The strongest completed path is RSS -> AI -> Search -> RAG. Non-RSS fetchers are intentionally marked as stubs.
+- The strongest completed path is RSS/GitHub Releases -> AI -> Search -> RAG. Reddit, Arxiv, YouTube, and HackerNews are intentionally marked as stubs.
 - RabbitMQ and etcd clients are implemented, but the gateway still keeps the MVP path in-process for easy local demo.
 - OAuth is not a full login flow yet; the GitHub authorization URL endpoint is present.
 - Observability is Prometheus-ready but not a complete tracing stack.
@@ -217,6 +222,7 @@ Read these first when reviewing the project:
 TechPulse - AI-powered Developer Knowledge Hub
 
 - Built a Go-based developer intelligence platform that collects RSS/Atom technical articles, deduplicates content by URL/content hash, generates AI summaries/tags/embeddings, and stores articles in MySQL.
+- Added GitHub Releases ingestion for open-source project monitoring, mapping release notes into the same AI/search/RAG article pipeline.
 - Implemented full-text search with Bleve, including title/content/summary/tag search, field boosting, pagination, filters, and highlight snippets.
 - Designed a modular architecture with gateway, fetcher, parser, AI pipeline, search, RAG, scheduler, and worker modules, prepared for microservice decomposition.
 - Built a RAG chat API that retrieves relevant articles and returns answers with citations and conversation memory.

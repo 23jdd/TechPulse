@@ -1,7 +1,7 @@
 APP=techpulse
 COMPOSE=docker compose -f deploy/docker-compose.yml
 
-.PHONY: dev demo run run-gateway run-scheduler run-fetcher run-parser run-ai-pipeline run-search run-rag run-worker build test lint docker-up docker-down migrate seed clean
+.PHONY: dev demo run run-gateway run-scheduler run-fetcher run-parser run-ai-pipeline run-search run-rag run-worker build test lint docker-up docker-down migrate seed reindex clean
 
 dev: docker-up migrate seed run
 
@@ -61,6 +61,9 @@ migrate:
 
 seed:
 	go run ./cmd/worker -mode=seed
+
+reindex:
+	curl -X POST http://localhost:8080/api/v1/search/reindex
 
 clean:
 	-$(COMPOSE) down -v

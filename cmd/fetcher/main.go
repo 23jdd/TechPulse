@@ -24,7 +24,7 @@ func main() {
 	client := httpclient.New(cfg.RequestTimeout)
 	fetchSvc := fetcher.NewService(fetcher.NewRegistry(
 		fetcher.NewRSSFetcher(client),
-		fetcher.GitHubReleaseFetcher{},
+		fetcher.NewGitHubReleaseFetcher(client, ""),
 		fetcher.HackerNewsFetcher{},
 		fetcher.RedditFetcher{},
 		fetcher.ArxivFetcher{},

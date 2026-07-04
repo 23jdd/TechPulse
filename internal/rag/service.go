@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"techpulse/internal/model"
+	"techpulse/internal/search"
 )
 
 type Answer struct {
@@ -48,6 +49,14 @@ func (s *Service) AskWithConversation(ctx context.Context, question string, user
 	if err != nil {
 		return nil, err
 	}
+	if len(hits) == 0 {
+		answer := "The knowledge base does not contain enough relevant articles to answer this question yet."
+		if s.memory != nil && conversationID > 0 {
+			_ = s.memory.StoreMessage(ctx, conversationID, "user", question, nil)
+			_ = s.memory.StoreMessage(ctx, conversationID, "assistant", answer, nil)
+		}
+		return &Answer{Answer: answer, Citations: []Citation{}}, nil
+	}
 	var history []model.Message
 	if s.memory != nil && conversationID > 0 {
 		history, _ = s.memory.RecentMessages(ctx, conversationID, 8)
@@ -59,10 +68,22 @@ func (s *Service) AskWithConversation(ctx context.Context, question string, user
 	}
 	citations := make([]Citation, 0, len(hits))
 	for _, hit := range hits {
-		citations = append(citations, Citation{ArticleID: hit.ID, Title: hit.Title, URL: hit.URL})
+		citations = append(citations, Citation{ArticleID: hit.ID, Title: hit.Title, URL: hit.URL, Snippet: citationSnippet(hit), Score: hit.Score})
 	}
 	if s.memory != nil && conversationID > 0 {
 		_ = s.memory.StoreMessage(ctx, conversationID, "assistant", answer, citations)
 	}
 	return &Answer{Answer: answer, Citations: citations}, nil
+}
+
+func citationSnippet(hit search.SearchHit) string {
+	for _, fragments := range hit.Highlight {
+		if len(fragments) > 0 {
+			return fragments[0]
+		}
+	}
+	if hit.Summary != "" {
+		return hit.Summary
+	}
+	return hit.Title
 }

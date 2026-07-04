@@ -98,7 +98,7 @@ The gateway can switch from direct package calls to `internal/service.Client` ca
 
 ## What Is Intentionally Not Finished
 
-- Non-RSS sources are stubs.
+- GitHub Releases are implemented. Reddit, Arxiv, YouTube, and HackerNews are still extension stubs.
 - GitHub OAuth callback is planned, not a full auth system.
 - Observability is Prometheus-ready, not a complete tracing deployment.
 - Hybrid search reranking is simple and designed as a stepping stone toward a vector index.

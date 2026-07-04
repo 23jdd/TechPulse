@@ -134,11 +134,51 @@ func (h *Handler) fetchFeed(r *http.Request, feedID int64) (*dto.FetchRSSRespons
 		h.hub.Broadcast(ws.Event{Type: "task_failed", Message: err.Error(), Time: time.Now()})
 		return &dto.FetchRSSResponse{FeedID: feed.ID, Errors: []string{err.Error()}}, http.StatusBadGateway
 	}
-	out := &dto.FetchRSSResponse{FeedID: feed.ID, Fetched: len(items)}
+	inserted, duplicates, errors := h.ingestFetchedItems(r, items)
+	out := &dto.FetchRSSResponse{FeedID: feed.ID, Fetched: len(items), Inserted: inserted, Duplicates: duplicates, Errors: errors}
+	_ = h.repo.MarkFeedFetched(ctx, feed.ID)
+	h.hub.Broadcast(ws.Event{Type: "fetch_finished", Message: feed.URL, Time: time.Now()})
+	return out, http.StatusOK
+}
+
+func (h *Handler) FetchGitHubReleases(w http.ResponseWriter, r *http.Request) {
+	var req dto.FetchGitHubReleasesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if strings.TrimSpace(req.URL) == "" {
+		response.Error(w, http.StatusBadRequest, "url is required")
+		return
+	}
+	h.hub.Broadcast(ws.Event{Type: "fetch_started", Message: req.URL, Time: time.Now()})
+	items, err := h.fetcher.Fetch(r.Context(), fetcher.Source{Type: "github_release", URL: req.URL, Title: req.URL, Category: "GitHub"})
+	if err != nil {
+		h.hub.Broadcast(ws.Event{Type: "task_failed", Message: err.Error(), Time: time.Now()})
+		response.Error(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	inserted, duplicates, errors := h.ingestFetchedItems(r, items)
+	h.hub.Broadcast(ws.Event{Type: "fetch_finished", Message: req.URL, Time: time.Now()})
+	response.JSON(w, http.StatusOK, dto.FetchSourceResponse{
+		SourceType: "github_release",
+		SourceURL:  req.URL,
+		Fetched:    len(items),
+		Inserted:   inserted,
+		Duplicates: duplicates,
+		Errors:     errors,
+	})
+}
+
+func (h *Handler) ingestFetchedItems(r *http.Request, items []fetcher.FetchedItem) (int, int, []string) {
+	ctx := r.Context()
+	var inserted int
+	var duplicates int
+	var errors []string
 	for _, item := range items {
 		parsed, err := h.parser.Parse(ctx, item)
 		if err != nil {
-			out.Errors = append(out.Errors, err.Error())
+			errors = append(errors, err.Error())
 			continue
 		}
 		content := parsed.CleanContent
@@ -147,16 +187,16 @@ func (h *Handler) fetchFeed(r *http.Request, feedID int64) (*dto.FetchRSSRespons
 		}
 		exists, urlHash, contentHash, err := h.duplicate.IsDuplicate(ctx, parsed.URL, content)
 		if err != nil {
-			out.Errors = append(out.Errors, err.Error())
+			errors = append(errors, err.Error())
 			continue
 		}
 		if exists {
-			out.Duplicates++
+			duplicates++
 			continue
 		}
 		enriched, err := h.pipeline.Process(ctx, parsed)
 		if err != nil {
-			out.Errors = append(out.Errors, err.Error())
+			errors = append(errors, err.Error())
 			continue
 		}
 		enriched.Article.URLHash = urlHash
@@ -176,22 +216,20 @@ func (h *Handler) fetchFeed(r *http.Request, feedID int64) (*dto.FetchRSSRespons
 		}
 		articleID, err := h.repo.StoreArticle(ctx, stored)
 		if err != nil {
-			out.Errors = append(out.Errors, err.Error())
+			errors = append(errors, err.Error())
 			continue
 		}
 		enriched.Article.ID = articleID
 		if err := h.search.IndexArticle(ctx, search.DocumentFromArticle(enriched.Article, enriched.Summary.ShortSummary, stored.Tags)); err != nil {
-			out.Errors = append(out.Errors, err.Error())
+			errors = append(errors, err.Error())
 			continue
 		}
-		out.Inserted++
+		inserted++
 		h.deleteCache(r, "dashboard:v1", "articles:list:page:1:size:20")
 		h.hub.Broadcast(ws.Event{Type: "new_article", Message: enriched.Article.Title, ArticleID: articleID, Time: time.Now()})
 		h.hub.Broadcast(ws.Event{Type: "index_finished", Message: enriched.Article.Title, ArticleID: articleID, Time: time.Now()})
 	}
-	_ = h.repo.MarkFeedFetched(ctx, feed.ID)
-	h.hub.Broadcast(ws.Event{Type: "fetch_finished", Message: feed.URL, Time: time.Now()})
-	return out, http.StatusOK
+	return inserted, duplicates, errors
 }
 
 func (h *Handler) ListArticles(w http.ResponseWriter, r *http.Request) {
@@ -332,6 +370,47 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	}
 	h.setCache(r, key, result, 30*time.Second)
 	response.JSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) SearchExplain(w http.ResponseWriter, r *http.Request) {
+	response.JSON(w, http.StatusOK, response.Envelope{
+		"query":  r.URL.Query().Get("q"),
+		"fields": []string{"title^3", "summary", "content", "tags"},
+		"filters": response.Envelope{
+			"tag":    r.URL.Query().Get("tag"),
+			"author": r.URL.Query().Get("author"),
+		},
+		"ranking": []string{
+			"Bleve lexical score with title boost",
+			"Optional embedding rerank through HybridEngine",
+			"Future freshness/tag-weight score can be added behind SearchEngine",
+		},
+		"highlight": true,
+	})
+}
+
+func (h *Handler) ReindexSearch(w http.ResponseWriter, r *http.Request) {
+	articles, err := h.repo.ListArticles(r.Context(), 1000, 0)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	var indexed int
+	var errors []string
+	for _, article := range articles {
+		summary := ""
+		if s, err := h.repo.GetSummary(r.Context(), article.ID); err == nil {
+			summary = s.ShortSummary
+		}
+		tags, _ := h.repo.TagsForArticle(r.Context(), article.ID)
+		if err := h.search.IndexArticle(r.Context(), search.DocumentFromArticle(article, summary, tags)); err != nil {
+			errors = append(errors, fmt.Sprintf("article %d: %v", article.ID, err))
+			continue
+		}
+		indexed++
+	}
+	h.deleteCache(r, "dashboard:v1")
+	response.JSON(w, http.StatusOK, response.Envelope{"indexed": indexed, "errors": errors})
 }
 
 func (h *Handler) Summary(w http.ResponseWriter, r *http.Request) {

@@ -10,15 +10,18 @@ import (
 
 func AIProvider(cfg config.Config, client *http.Client) ai.Provider {
 	provider := strings.ToLower(strings.TrimSpace(cfg.AIProvider))
+	var base ai.Provider
 	switch provider {
 	case "", "mock":
-		return ai.NewMockProvider()
+		base = ai.NewMockProvider()
 	case "ollama":
-		return ai.NewOllamaCompatibleProvider(cfg.AIBaseURL, cfg.AIModel, client)
+		base = ai.NewOllamaCompatibleProvider(cfg.AIBaseURL, cfg.AIModel, client)
 	default:
 		if cfg.AIAPIKey == "" {
-			return ai.NewMockProvider()
+			base = ai.NewMockProvider()
+			break
 		}
-		return ai.NewOpenAICompatibleProvider(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIModel, client)
+		base = ai.NewOpenAICompatibleProvider(cfg.AIBaseURL, cfg.AIAPIKey, cfg.AIModel, client)
 	}
+	return ai.NewResilientProvider(base, cfg.RequestTimeout, 2)
 }

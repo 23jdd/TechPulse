@@ -175,6 +175,15 @@ func (r *Repository) ListArticles(ctx context.Context, limit, offset int) ([]mod
 	return articles, err
 }
 
+func (r *Repository) ListArticlesSince(ctx context.Context, since time.Time, limit int) ([]model.Article, error) {
+	var articles []model.Article
+	err := r.db.SelectContext(ctx, &articles, `SELECT * FROM articles
+WHERE COALESCE(published_at, created_at) >= ?
+ORDER BY COALESCE(published_at, created_at) DESC
+LIMIT ?`, since, limit)
+	return articles, err
+}
+
 func (r *Repository) GetArticle(ctx context.Context, id int64) (*model.Article, error) {
 	var article model.Article
 	if err := r.db.GetContext(ctx, &article, `SELECT * FROM articles WHERE id = ?`, id); err != nil {
@@ -304,6 +313,34 @@ func (r *Repository) StoreDailyReport(ctx context.Context, report *model.DailyRe
 		return err
 	}
 	report.ID, err = res.LastInsertId()
+	return err
+}
+
+func (r *Repository) CreateTask(ctx context.Context, typ, payload string) (int64, error) {
+	res, err := r.db.ExecContext(ctx, `INSERT INTO tasks (type, status, payload, scheduled_at) VALUES (?, 'pending', ?, NOW())`, typ, payload)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (r *Repository) MarkTaskRunning(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE tasks SET status = 'running', started_at = NOW(), updated_at = NOW() WHERE id = ?`, id)
+	return err
+}
+
+func (r *Repository) MarkTaskSuccess(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE tasks SET status = 'success', finished_at = NOW(), updated_at = NOW() WHERE id = ?`, id)
+	return err
+}
+
+func (r *Repository) MarkTaskFailed(ctx context.Context, id int64, message string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE tasks SET status = 'failed', error_message = ?, finished_at = NOW(), updated_at = NOW() WHERE id = ?`, message, id)
+	return err
+}
+
+func (r *Repository) MarkTaskRetrying(ctx context.Context, id int64, message string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE tasks SET status = 'retrying', retry_count = retry_count + 1, error_message = ?, updated_at = NOW() WHERE id = ?`, message, id)
 	return err
 }
 

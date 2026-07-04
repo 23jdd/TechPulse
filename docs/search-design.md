@@ -18,6 +18,8 @@ TechPulse search is intentionally simple, explainable, and local-first.
 4. Highlight: matched fragments are returned from Bleve.
 5. Pagination: `page` and `page_size`.
 6. Optional reranking: `HybridEngine` can call the AI provider embedding function and rerank top lexical hits.
+7. Explainability: `/api/v1/search/explain` returns active fields, filters, and ranking strategy.
+8. Operations: `/api/v1/search/reindex` rebuilds the Bleve index from MySQL.
 
 ## Why Bleve
 

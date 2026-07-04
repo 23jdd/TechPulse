@@ -13,3 +13,16 @@ type FetchRSSResponse struct {
 	Duplicates int      `json:"duplicates"`
 	Errors     []string `json:"errors,omitempty"`
 }
+
+type FetchGitHubReleasesRequest struct {
+	URL string `json:"url"`
+}
+
+type FetchSourceResponse struct {
+	SourceType string   `json:"source_type"`
+	SourceURL  string   `json:"source_url"`
+	Fetched    int      `json:"fetched"`
+	Inserted   int      `json:"inserted"`
+	Duplicates int      `json:"duplicates"`
+	Errors     []string `json:"errors,omitempty"`
+}

@@ -50,11 +50,11 @@ func main() {
 		}
 		fmt.Println("seed complete")
 	default:
-		runWorker(cfg, logger)
+		runWorker(cfg, repo, logger)
 	}
 }
 
-func runWorker(cfg config.Config, logger *zap.Logger) {
+func runWorker(cfg config.Config, repo *mysql.Repository, logger *zap.Logger) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	broker := queue.NewRabbitMQ(cfg.RabbitMQURL)
@@ -68,12 +68,70 @@ func runWorker(cfg config.Config, logger *zap.Logger) {
 		}
 		go func(name string, ch <-chan queue.Message) {
 			for msg := range ch {
-				raw, _ := json.Marshal(msg.Payload)
-				logger.Info("worker received job", zap.String("queue", name), zap.String("type", string(msg.Type)), zap.ByteString("payload", raw))
+				handleMessage(ctx, broker, repo, logger, name, msg)
 			}
 		}(queueName, messages)
 	}
 	logger.Info("worker started", zap.Strings("queues", queues))
 	<-ctx.Done()
 	os.Exit(0)
+}
+
+func handleMessage(ctx context.Context, broker *queue.RabbitMQ, repo *mysql.Repository, logger *zap.Logger, queueName string, msg queue.Message) {
+	start := time.Now()
+	raw, _ := json.Marshal(msg.Payload)
+	taskID, err := repo.CreateTask(ctx, string(msg.Type), string(raw))
+	if err != nil {
+		logger.Error("create task failed", zap.String("queue", queueName), zap.Error(err))
+		return
+	}
+	if err := repo.MarkTaskRunning(ctx, taskID); err != nil {
+		logger.Warn("mark task running failed", zap.Int64("task_id", taskID), zap.Error(err))
+	}
+	err = processJob(ctx, queueName, msg)
+	if err == nil {
+		_ = repo.MarkTaskSuccess(ctx, taskID)
+		logger.Info("worker job succeeded", zap.Int64("task_id", taskID), zap.String("queue", queueName), zap.String("type", string(msg.Type)), zap.Duration("duration", time.Since(start)))
+		return
+	}
+	retryCount := payloadInt(msg.Payload, "retry_count")
+	if retryCount < 3 {
+		msg.Payload["retry_count"] = retryCount + 1
+		_ = repo.MarkTaskRetrying(ctx, taskID, err.Error())
+		if publishErr := broker.Publish(ctx, queueName, msg); publishErr != nil {
+			logger.Error("republish retry failed", zap.Int64("task_id", taskID), zap.Error(publishErr))
+		}
+		logger.Warn("worker job retrying", zap.Int64("task_id", taskID), zap.Int("retry_count", retryCount+1), zap.Error(err))
+		return
+	}
+	_ = repo.MarkTaskFailed(ctx, taskID, err.Error())
+	dlq := queueName + ".dlq"
+	if publishErr := broker.Publish(ctx, dlq, msg); publishErr != nil {
+		logger.Error("publish dlq failed", zap.Int64("task_id", taskID), zap.String("dlq", dlq), zap.Error(publishErr))
+	}
+	logger.Error("worker job failed", zap.Int64("task_id", taskID), zap.String("queue", queueName), zap.Error(err), zap.Duration("duration", time.Since(start)))
+}
+
+func processJob(_ context.Context, _ string, msg queue.Message) error {
+	if force, ok := msg.Payload["force_error"].(bool); ok && force {
+		return fmt.Errorf("forced worker error")
+	}
+	return nil
+}
+
+func payloadInt(payload map[string]any, key string) int {
+	value, ok := payload[key]
+	if !ok {
+		return 0
+	}
+	switch v := value.(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	default:
+		return 0
+	}
 }
