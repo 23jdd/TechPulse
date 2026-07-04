@@ -41,6 +41,8 @@ docker compose up -d --build
 
 国内网络构建默认支持代理：`.env` 中可配置 `GOPROXY=https://goproxy.cn,direct` 和 `ALPINE_MIRROR=https://mirrors.aliyun.com/alpine`。
 
+Docker Compose 部署时，`.env` 里的服务地址要写容器服务名，例如 `mysql:3306`、`redis:6379`、`rabbitmq:5672`，不要写 `localhost`。
+
 打开 `http://localhost:8080/login` 或 `http://localhost:8080/login/zh`。
 
 启动本地依赖和 gateway：

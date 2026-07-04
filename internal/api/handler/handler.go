@@ -752,13 +752,17 @@ func (h *Handler) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) renderOAuthSuccess(w http.ResponseWriter, user *model.User, token string, zh bool) {
 	userJSON, _ := json.Marshal(user)
 	tokenJSON, _ := json.Marshal(token)
-	redirect := "/dashboard"
+	redirect := "/app"
 	title := "Signed in"
-	message := "GitHub login succeeded. Redirecting to dashboard..."
+	message := "GitHub login succeeded. Redirecting to app..."
 	if zh {
-		redirect = "/dashboard/zh"
+		redirect = "/app/zh"
 		title = "登录成功"
 		message = "GitHub 登录成功，正在进入控制台..."
+	}
+	if zh {
+		title = "登录成功"
+		message = "GitHub 登录成功，正在进入应用..."
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = fmt.Fprintf(w, `<!doctype html>

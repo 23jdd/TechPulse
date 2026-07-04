@@ -117,7 +117,7 @@
 
     function demoLogin() {
       localStorage.setItem("techpulse_session", JSON.stringify({mode: "demo", user: "demo"}));
-      window.location.href = "/dashboard";
+      window.location.href = "/app";
     }
 
     function tokenLogin() {
@@ -128,7 +128,7 @@
       }
       localStorage.setItem("techpulse_api_token", token);
       localStorage.setItem("techpulse_session", JSON.stringify({mode: "token"}));
-      window.location.href = "/dashboard";
+      window.location.href = "/app";
     }
 
     if (window.lucide) window.lucide.createIcons();

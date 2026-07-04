@@ -17,13 +17,25 @@ ALPINE_MIRROR=https://mirrors.aliyun.com/alpine
 
 Set `ALPINE_MIRROR=` to disable Alpine mirror rewriting.
 
+When running inside Docker Compose, service addresses must use Compose service names, not `localhost`:
+
+```env
+MYSQL_DSN=root:password@tcp(mysql:3306)/techpulse?parseTime=true&charset=utf8mb4&multiStatements=true
+REDIS_ADDR=redis:6379
+RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+ETCD_ENDPOINTS=etcd:2379
+MINIO_ENDPOINT=minio:9000
+```
+
+Inside a container, `localhost` means the current container itself.
+
 Open:
 
 ```text
 http://localhost:8080/login
 http://localhost:8080/login/zh
-http://localhost:8080/dashboard
-http://localhost:8080/dashboard/zh
+http://localhost:8080/app
+http://localhost:8080/app/zh
 ```
 
 Optional demo feed seed:

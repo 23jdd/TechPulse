@@ -39,6 +39,8 @@ docker compose up -d --build
 
 China mainland build proxy defaults are available through `.env`: `GOPROXY=https://goproxy.cn,direct` and `ALPINE_MIRROR=https://mirrors.aliyun.com/alpine`.
 
+For Docker Compose, `.env` service addresses should use container service names such as `mysql:3306`, `redis:6379`, and `rabbitmq:5672`, not `localhost`.
+
 Open `http://localhost:8080/login` or `http://localhost:8080/login/zh`.
 
 Start local infrastructure and the gateway:
@@ -107,7 +109,7 @@ make demo
 
 ## Web UI
 
-A Tailwind dashboard is served by the gateway at `http://localhost:8080/` and `http://localhost:8080/dashboard`. The login page is available at `http://localhost:8080/login`. The Chinese UI is available at `http://localhost:8080/zh`, `http://localhost:8080/dashboard/zh`, and `http://localhost:8080/login/zh`. It provides feed management, article fetch, search, article preview, summary, RAG chat, and daily report generation over the REST API.
+A Tailwind user app is served by the gateway at `http://localhost:8080/` and `http://localhost:8080/app`. The login page is available at `http://localhost:8080/login`. The Chinese UI is available at `http://localhost:8080/zh`, `http://localhost:8080/app/zh`, and `http://localhost:8080/login/zh`. It provides feed management, article fetch, search, article reading, summary, RAG chat, saved articles, read-later flow, and daily report generation over the REST API.
 
 ## Feature Status
 

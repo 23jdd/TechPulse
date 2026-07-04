@@ -8,7 +8,7 @@
 docker compose up -d --build
 ```
 
-国内网络默认使用这些 Docker 构建代理，可以写在 `.env` 中覆盖：
+中国大陆网络默认使用这些 Docker 构建代理，可以写在 `.env` 中覆盖：
 
 ```env
 GOPROXY=https://goproxy.cn,direct
@@ -17,13 +17,25 @@ ALPINE_MIRROR=https://mirrors.aliyun.com/alpine
 
 如果不想替换 Alpine 源，可以设置 `ALPINE_MIRROR=`。
 
+使用 Docker Compose 运行时，服务地址必须写 Compose 服务名，不能写 `localhost`：
+
+```env
+MYSQL_DSN=root:password@tcp(mysql:3306)/techpulse?parseTime=true&charset=utf8mb4&multiStatements=true
+REDIS_ADDR=redis:6379
+RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+ETCD_ENDPOINTS=etcd:2379
+MINIO_ENDPOINT=minio:9000
+```
+
+在容器里，`localhost` 指当前容器自己，不是宿主机，也不是其他服务容器。
+
 打开：
 
 ```text
 http://localhost:8080/login
 http://localhost:8080/login/zh
-http://localhost:8080/dashboard
-http://localhost:8080/dashboard/zh
+http://localhost:8080/app
+http://localhost:8080/app/zh
 ```
 
 可选：导入 demo Feed：

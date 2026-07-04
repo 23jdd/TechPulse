@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 FROM golang:1.25-alpine AS build
 
 ARG GOPROXY=https://goproxy.cn,direct
@@ -11,16 +13,13 @@ RUN if [ -n "$ALPINE_MIRROR" ]; then \
 
 WORKDIR /src
 COPY go.mod go.sum* ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 COPY . .
-RUN go build -o /out/gateway ./cmd/gateway \
- && go build -o /out/scheduler ./cmd/scheduler \
- && go build -o /out/fetcher ./cmd/fetcher \
- && go build -o /out/parser ./cmd/parser \
- && go build -o /out/ai-pipeline ./cmd/ai-pipeline \
- && go build -o /out/search ./cmd/search \
- && go build -o /out/rag ./cmd/rag \
- && go build -o /out/worker ./cmd/worker
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    mkdir -p /out \
+ && go build -o /out/ ./cmd/gateway ./cmd/scheduler ./cmd/fetcher ./cmd/parser ./cmd/ai-pipeline ./cmd/search ./cmd/rag ./cmd/worker
 
 FROM alpine:3.20
 

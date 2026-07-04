@@ -17,7 +17,13 @@ func New(h *handler.Handler, logger *zap.Logger, defaultUserID int64) http.Handl
 	r.Use(chimw.Recoverer)
 	r.Use(middleware.Logging(logger))
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "web/dashboard.html")
+		http.ServeFile(w, r, "web/app.html")
+	})
+	r.Get("/app", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/app.html")
+	})
+	r.Get("/app.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/app.js")
 	})
 	r.Get("/login", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/login.html")
@@ -26,13 +32,16 @@ func New(h *handler.Handler, logger *zap.Logger, defaultUserID int64) http.Handl
 		http.ServeFile(w, r, "web/login.zh-CN.html")
 	})
 	r.Get("/zh", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "web/dashboard.zh-CN.html")
+		http.ServeFile(w, r, "web/app.zh-CN.html")
+	})
+	r.Get("/app/zh", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/app.zh-CN.html")
 	})
 	r.Get("/dashboard", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "web/dashboard.html")
+		http.Redirect(w, r, "/app", http.StatusFound)
 	})
 	r.Get("/dashboard/zh", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "web/dashboard.zh-CN.html")
+		http.Redirect(w, r, "/app/zh", http.StatusFound)
 	})
 	r.Get("/health", h.Health)
 	r.Get("/metrics", observability.NewMetrics().Handler().ServeHTTP)

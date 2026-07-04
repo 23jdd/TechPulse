@@ -14,7 +14,7 @@ flowchart LR
   Gateway --> RAG
   RAG --> Search
   Gateway --> WebSocket
-  Gateway --> Dashboard
+  Gateway --> UserApp
 ```
 
 Phase 1 runs the real MVP path in the gateway process. Phase 2 exposes scheduler, fetcher, parser, AI pipeline, search, RAG, and worker as independently runnable services.
