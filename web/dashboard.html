@@ -99,6 +99,11 @@
       color: var(--ink);
       border: 1px solid var(--line);
     }
+    button.danger {
+      background: #fff1f2;
+      color: #9f1239;
+      border: 1px solid #fecdd3;
+    }
     .row {
       display: grid;
       grid-template-columns: 1fr auto;
@@ -136,6 +141,17 @@
       border-bottom: 1px solid var(--line);
     }
     .toolbar input { margin: 0; }
+    .actions {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .actions button {
+      min-height: 32px;
+      padding: 6px;
+      font-size: 12px;
+    }
     .summary, .answer {
       white-space: pre-wrap;
       line-height: 1.5;
@@ -170,6 +186,8 @@
         <input id="feedUrl" value="https://go.dev/blog/feed.atom">
         <label for="feedTitle">Title</label>
         <input id="feedTitle" value="Go Blog">
+        <label for="feedInterval">Fetch interval minutes</label>
+        <input id="feedInterval" type="number" min="5" step="5" value="360">
         <button onclick="addFeed()">Add Feed</button>
         <div style="height:16px"></div>
         <label for="githubUrl">GitHub Repository</label>
@@ -235,7 +253,8 @@
     async function addFeed() {
       const url = document.getElementById("feedUrl").value.trim();
       const title = document.getElementById("feedTitle").value.trim();
-      await request("/api/v1/rss", {method: "POST", body: JSON.stringify({url, title, category: "Demo"})});
+      const fetch_interval_minutes = Number(document.getElementById("feedInterval").value || 60);
+      await request("/api/v1/rss", {method: "POST", body: JSON.stringify({url, title, category: "Demo", fetch_interval_minutes})});
       await loadFeeds();
     }
 
@@ -248,7 +267,16 @@
         for (const feed of data.items || []) {
           const el = document.createElement("div");
           el.className = "feed";
-          el.innerHTML = `<div class="feed-title">${escapeHtml(feed.title || feed.url)}</div><div class="meta">${escapeHtml(feed.url)}</div><div class="meta">Click to fetch</div>`;
+          el.innerHTML = `
+            <div class="feed-title">${escapeHtml(feed.title || feed.url)}</div>
+            <div class="meta">${escapeHtml(feed.url)}</div>
+            <div class="meta">status: ${escapeHtml(feed.status)} · every ${escapeHtml(feed.fetch_interval_minutes || 60)}m</div>
+            <div class="actions">
+              <button onclick="event.stopPropagation(); fetchFeed(${feed.id})">Fetch</button>
+              <button class="secondary" onclick="event.stopPropagation(); testFeed(${feed.id})">Test</button>
+              <button class="secondary" onclick="event.stopPropagation(); toggleFeed(${feed.id}, '${feed.status === "disabled" ? "enable" : "disable"}')">${feed.status === "disabled" ? "Enable" : "Disable"}</button>
+              <button class="danger" onclick="event.stopPropagation(); deleteFeed(${feed.id})">Delete</button>
+            </div>`;
           el.onclick = () => fetchFeed(feed.id);
           box.appendChild(el);
         }
@@ -262,6 +290,21 @@
       const data = await request(`/api/v1/rss/${id}/fetch`, {method: "POST"});
       alert(`Fetched ${data.fetched}, inserted ${data.inserted}, duplicates ${data.duplicates}`);
       await loadArticles();
+    }
+
+    async function testFeed(id) {
+      const data = await request(`/api/v1/rss/${id}/test`, {method: "POST"});
+      alert(`Feed ok: ${data.ok}, items: ${data.fetched}, duration: ${data.duration}`);
+    }
+
+    async function toggleFeed(id, action) {
+      await request(`/api/v1/rss/${id}/${action}`, {method: "POST"});
+      await loadFeeds();
+    }
+
+    async function deleteFeed(id) {
+      await request(`/api/v1/rss/${id}`, {method: "DELETE"});
+      await loadFeeds();
     }
 
     async function fetchGitHubReleases() {
@@ -294,11 +337,37 @@
       for (const article of items) {
         const el = document.createElement("div");
         el.className = "article";
-        el.innerHTML = `<div class="article-title">${escapeHtml(article.title || "Untitled")}</div><div class="meta">${escapeHtml(article.url || "")}</div>`;
+        el.innerHTML = `
+          <div class="article-title">${escapeHtml(article.title || "Untitled")}</div>
+          <div class="meta">${escapeHtml(article.url || "")}</div>
+          <div class="actions">
+            <button class="secondary" onclick="event.stopPropagation(); markRead(${article.id})">Read</button>
+            <button class="secondary" onclick="event.stopPropagation(); favoriteArticle(${article.id})">Favorite</button>
+            <button class="secondary" onclick="event.stopPropagation(); archiveArticle(${article.id})">Archive</button>
+            <button class="danger" onclick="event.stopPropagation(); deleteArticle(${article.id})">Delete</button>
+          </div>`;
         el.onclick = () => showArticle(article.id, article.title, article.url);
         box.appendChild(el);
       }
       if (!box.children.length) box.innerHTML = `<div class="empty">No articles found.</div>`;
+    }
+
+    async function markRead(id) {
+      await request(`/api/v1/articles/${id}/read`, {method: "POST"});
+    }
+
+    async function favoriteArticle(id) {
+      await request(`/api/v1/articles/${id}/favorite`, {method: "POST"});
+    }
+
+    async function archiveArticle(id) {
+      await request(`/api/v1/articles/${id}/archive`, {method: "POST"});
+      await loadArticles();
+    }
+
+    async function deleteArticle(id) {
+      await request(`/api/v1/articles/${id}`, {method: "DELETE"});
+      await loadArticles();
     }
 
     async function showArticle(id, title, url) {

@@ -3,12 +3,17 @@
 Base URL: `http://localhost:8080`
 
 - `GET /health` returns gateway and Redis cache status
-- `POST /api/v1/rss` with `{"url":"https://go.dev/blog/feed.atom","title":"Go Blog","category":"Go"}`
+- `POST /api/v1/rss` with `{"url":"https://go.dev/blog/feed.atom","title":"Go Blog","category":"Go","fetch_interval_minutes":360}`
 - `GET /api/v1/rss`
+- `PUT /api/v1/rss/{id}` with `{"url":"...","title":"...","category":"Go","status":"active","fetch_interval_minutes":120}`
+- `POST /api/v1/rss/{id}/enable`
+- `POST /api/v1/rss/{id}/disable`
+- `POST /api/v1/rss/{id}/test`
 - `POST /api/v1/rss/{id}/fetch`
 - `POST /api/v1/github/releases/fetch` with `{"url":"https://github.com/golang/go"}`
-- `GET /api/v1/articles`
+- `GET /api/v1/articles?tag=Go&source=rss&read=false&favorite=true&archived=false&from=2026-07-01&to=2026-07-04`
 - `GET /api/v1/search?q=go&page=1&page_size=20`
+- `GET /api/v1/search?tag=Go&source=github_release&from=2026-07-01&to=2026-07-04`
 - `GET /api/v1/search/explain?q=go`
 - `POST /api/v1/search/reindex`
 - `POST /api/v1/chat` with `{"question":"What is new in Go?","conversation_id":1}`
@@ -18,8 +23,13 @@ Base URL: `http://localhost:8080`
 User features:
 
 - `POST /api/v1/articles/{id}/read`
+- `POST /api/v1/articles/{id}/favorite`
+- `DELETE /api/v1/articles/{id}/favorite`
 - `POST /api/v1/articles/{id}/read-later`
 - `DELETE /api/v1/articles/{id}/read-later`
+- `POST /api/v1/articles/{id}/archive`
+- `DELETE /api/v1/articles/{id}/archive`
+- `DELETE /api/v1/articles/{id}`
 - `GET /api/v1/favorites?type=favorite`
 - `GET /api/v1/favorites?type=read_later`
 - `GET /api/v1/reading-history`

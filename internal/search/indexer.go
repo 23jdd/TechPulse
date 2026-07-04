@@ -15,6 +15,8 @@ func DocumentFromArticle(article model.Article, summary string, tags []string) A
 		ID:          article.ID,
 		Title:       article.Title,
 		URL:         article.URL,
+		SourceType:  article.SourceType,
+		SourceID:    article.SourceID,
 		Author:      article.Author,
 		Content:     article.CleanContent,
 		Summary:     summary,

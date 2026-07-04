@@ -6,6 +6,8 @@ type ArticleSearchDocument struct {
 	ID          int64     `json:"id"`
 	Title       string    `json:"title"`
 	URL         string    `json:"url"`
+	SourceType  string    `json:"source_type"`
+	SourceID    int64     `json:"source_id"`
 	Author      string    `json:"author"`
 	Content     string    `json:"content"`
 	Summary     string    `json:"summary"`
@@ -16,6 +18,8 @@ type ArticleSearchDocument struct {
 type SearchQuery struct {
 	Query    string     `json:"query"`
 	Tag      string     `json:"tag"`
+	Source   string     `json:"source"`
+	SourceID int64      `json:"source_id"`
 	Author   string     `json:"author"`
 	DateFrom *time.Time `json:"date_from,omitempty"`
 	DateTo   *time.Time `json:"date_to,omitempty"`

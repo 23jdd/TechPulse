@@ -16,6 +16,8 @@ Most blog projects are CRUD demos. TechPulse shows backend system design around 
 
 - production-style Go package layout
 - real RSS/Atom fetching
+- feed CRUD with enable/disable, fetch interval, health test, OPML import/export
+- article read/favorite/read-later/archive/delete workflows
 - real GitHub Releases fetching
 - GitHub OAuth callback with user upsert
 - SMTP email delivery for test mail and daily reports
@@ -43,11 +45,12 @@ curl http://localhost:8080/health
 
 curl -X POST http://localhost:8080/api/v1/rss \
   -H "Content-Type: application/json" \
-  -d '{"url":"https://go.dev/blog/feed.atom","title":"Go Blog","category":"Go"}'
+  -d '{"url":"https://go.dev/blog/feed.atom","title":"Go Blog","category":"Go","fetch_interval_minutes":360}'
 
+curl -X POST http://localhost:8080/api/v1/rss/1/test
 curl -X POST http://localhost:8080/api/v1/rss/1/fetch
 
-curl "http://localhost:8080/api/v1/search?q=go&page=1&page_size=20"
+curl "http://localhost:8080/api/v1/search?q=go&tag=Go&source=rss&page=1&page_size=20"
 
 curl -X POST http://localhost:8080/api/v1/chat \
   -H "Content-Type: application/json" \
@@ -98,6 +101,7 @@ A lightweight dashboard is available at [web/dashboard.html](web/dashboard.html)
 
 | Module | Status | Notes |
 | --- | --- | --- |
+| Feed Management | Working | Create, update, delete, enable/disable, test, interval, OPML |
 | RSS / Atom Fetch | Working | Real HTTP fetch with timeout and user-agent |
 | GitHub Releases | Working | Fetches release title, tag, body, author, published time |
 | Parser / Cleaner | Working | RSS item parsing and simple HTML cleaner |
@@ -107,7 +111,8 @@ A lightweight dashboard is available at [web/dashboard.html](web/dashboard.html)
 | Ollama Provider Mode | Working | Uses OpenAI-compatible `/v1` endpoint |
 | MySQL Storage | Working | Auto migration on gateway startup |
 | Redis Cache | Working | Best-effort cache for hot REST responses |
-| Bleve Search | Working | Title/content/summary/tag search, boost, filters, highlight |
+| Article Management | Working | List/detail, read history, favorite, read later, archive, delete |
+| Bleve Search | Working | Title/content/summary/tag/source/date search, boost, filters, highlight |
 | RAG Chat | Basic Working | Retrieves top articles and returns citations |
 | WebSocket Events | Working | Emits fetch/index/new article events |
 | GitHub OAuth | Basic Working | Auth URL, callback, GitHub user upsert |

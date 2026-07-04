@@ -9,6 +9,7 @@ type RSSFeed struct {
 	Title         string     `db:"title" json:"title"`
 	Category      string     `db:"category" json:"category"`
 	Status        string     `db:"status" json:"status"`
+	FetchInterval int        `db:"fetch_interval_minutes" json:"fetch_interval_minutes"`
 	LastFetchedAt *time.Time `db:"last_fetched_at" json:"last_fetched_at,omitempty"`
 	CreatedAt     time.Time  `db:"created_at" json:"created_at"`
 	UpdatedAt     time.Time  `db:"updated_at" json:"updated_at"`

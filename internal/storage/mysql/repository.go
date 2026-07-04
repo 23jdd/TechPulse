@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -32,6 +33,21 @@ type Dashboard struct {
 	FailedTasks      int64    `json:"failed_tasks"`
 	WorkerStatus     string   `json:"worker_status"`
 	AITokenCost      string   `json:"ai_token_cost"`
+}
+
+type ArticleFilter struct {
+	UserID      int64
+	SourceType  string
+	SourceID    int64
+	Tag         string
+	From        *time.Time
+	To          *time.Time
+	IsRead      *bool
+	IsFavorite  *bool
+	IsReadLater *bool
+	IsArchived  *bool
+	Limit       int
+	Offset      int
 }
 
 type UserPrompt struct {
@@ -70,12 +86,33 @@ ON DUPLICATE KEY UPDATE username = VALUES(username), email = VALUES(email), avat
 }
 
 func (r *Repository) CreateFeed(ctx context.Context, feed *model.RSSFeed) error {
-	res, err := r.db.ExecContext(ctx, `INSERT INTO rss_feeds (user_id, url, title, category, status) VALUES (?, ?, ?, ?, ?)`,
-		feed.UserID, feed.URL, feed.Title, feed.Category, defaultString(feed.Status, "active"))
+	interval := feed.FetchInterval
+	if interval <= 0 {
+		interval = 60
+	}
+	res, err := r.db.ExecContext(ctx, `INSERT INTO rss_feeds (user_id, url, title, category, status, fetch_interval_minutes) VALUES (?, ?, ?, ?, ?, ?)`,
+		feed.UserID, feed.URL, feed.Title, feed.Category, defaultString(feed.Status, "active"), interval)
 	if err != nil {
 		return err
 	}
 	feed.ID, err = res.LastInsertId()
+	return err
+}
+
+func (r *Repository) UpdateFeed(ctx context.Context, feed *model.RSSFeed) error {
+	interval := feed.FetchInterval
+	if interval <= 0 {
+		interval = 60
+	}
+	_, err := r.db.ExecContext(ctx, `UPDATE rss_feeds
+SET url = ?, title = ?, category = ?, status = ?, fetch_interval_minutes = ?, updated_at = NOW()
+WHERE id = ? AND user_id = ?`,
+		feed.URL, feed.Title, feed.Category, defaultString(feed.Status, "active"), interval, feed.ID, feed.UserID)
+	return err
+}
+
+func (r *Repository) SetFeedStatus(ctx context.Context, userID, id int64, status string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE rss_feeds SET status = ?, updated_at = NOW() WHERE id = ? AND user_id = ?`, status, id, userID)
 	return err
 }
 
@@ -184,8 +221,90 @@ func upsertTag(ctx context.Context, tx *sqlx.Tx, name, kind string) (int64, erro
 }
 
 func (r *Repository) ListArticles(ctx context.Context, limit, offset int) ([]model.Article, error) {
+	return r.ListArticlesFiltered(ctx, ArticleFilter{Limit: limit, Offset: offset})
+}
+
+func (r *Repository) ListArticlesFiltered(ctx context.Context, filter ArticleFilter) ([]model.Article, error) {
+	if filter.Limit < 1 || filter.Limit > 100 {
+		filter.Limit = 20
+	}
+	if filter.Offset < 0 {
+		filter.Offset = 0
+	}
+	var query strings.Builder
+	query.WriteString(`SELECT DISTINCT a.* FROM articles a`)
+	args := []any{}
+	if filter.Tag != "" {
+		query.WriteString(` JOIN article_tags at_filter ON at_filter.article_id = a.id JOIN tags t_filter ON t_filter.id = at_filter.tag_id`)
+	}
+	if filter.IsRead != nil {
+		if *filter.IsRead {
+			query.WriteString(` JOIN reading_history h_filter ON h_filter.article_id = a.id AND h_filter.user_id = ?`)
+		} else {
+			query.WriteString(` LEFT JOIN reading_history h_filter ON h_filter.article_id = a.id AND h_filter.user_id = ?`)
+		}
+		args = append(args, filter.UserID)
+	}
+	appendFavoriteJoin := func(alias, typ string, active bool) {
+		if active {
+			query.WriteString(` JOIN favorites ` + alias + ` ON ` + alias + `.article_id = a.id AND ` + alias + `.user_id = ? AND ` + alias + `.type = ?`)
+		} else {
+			query.WriteString(` LEFT JOIN favorites ` + alias + ` ON ` + alias + `.article_id = a.id AND ` + alias + `.user_id = ? AND ` + alias + `.type = ?`)
+		}
+		args = append(args, filter.UserID, typ)
+	}
+	if filter.IsFavorite != nil {
+		appendFavoriteJoin("f_filter", "favorite", *filter.IsFavorite)
+	}
+	if filter.IsReadLater != nil {
+		appendFavoriteJoin("rl_filter", "read_later", *filter.IsReadLater)
+	}
+	archived := false
+	if filter.IsArchived != nil {
+		archived = *filter.IsArchived
+	}
+	appendFavoriteJoin("ar_filter", "archived", archived)
+	where := []string{}
+	if filter.SourceType != "" {
+		where = append(where, "a.source_type = ?")
+		args = append(args, filter.SourceType)
+	}
+	if filter.SourceID > 0 {
+		where = append(where, "a.source_id = ?")
+		args = append(args, filter.SourceID)
+	}
+	if filter.Tag != "" {
+		where = append(where, "t_filter.name = ?")
+		args = append(args, filter.Tag)
+	}
+	if filter.From != nil {
+		where = append(where, "COALESCE(a.published_at, a.created_at) >= ?")
+		args = append(args, *filter.From)
+	}
+	if filter.To != nil {
+		where = append(where, "COALESCE(a.published_at, a.created_at) <= ?")
+		args = append(args, *filter.To)
+	}
+	if filter.IsRead != nil && !*filter.IsRead {
+		where = append(where, "h_filter.id IS NULL")
+	}
+	if filter.IsFavorite != nil && !*filter.IsFavorite {
+		where = append(where, "f_filter.id IS NULL")
+	}
+	if filter.IsReadLater != nil && !*filter.IsReadLater {
+		where = append(where, "rl_filter.id IS NULL")
+	}
+	if !archived {
+		where = append(where, "ar_filter.id IS NULL")
+	}
+	if len(where) > 0 {
+		query.WriteString(" WHERE ")
+		query.WriteString(strings.Join(where, " AND "))
+	}
+	query.WriteString(` ORDER BY COALESCE(a.published_at, a.created_at) DESC LIMIT ? OFFSET ?`)
+	args = append(args, filter.Limit, filter.Offset)
 	var articles []model.Article
-	err := r.db.SelectContext(ctx, &articles, `SELECT * FROM articles ORDER BY COALESCE(published_at, created_at) DESC LIMIT ? OFFSET ?`, limit, offset)
+	err := r.db.SelectContext(ctx, &articles, query.String(), args...)
 	return articles, err
 }
 
@@ -254,6 +373,29 @@ LIMIT ? OFFSET ?`, userID, defaultString(typ, "favorite"), limit, offset)
 func (r *Repository) RemoveFavorite(ctx context.Context, userID, articleID int64, typ string) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM favorites WHERE user_id = ? AND article_id = ? AND type = ?`, userID, articleID, defaultString(typ, "favorite"))
 	return err
+}
+
+func (r *Repository) DeleteArticle(ctx context.Context, articleID int64) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	statements := []string{
+		`DELETE FROM summaries WHERE article_id = ?`,
+		`DELETE FROM translations WHERE article_id = ?`,
+		`DELETE FROM embeddings WHERE article_id = ?`,
+		`DELETE FROM article_tags WHERE article_id = ?`,
+		`DELETE FROM favorites WHERE article_id = ?`,
+		`DELETE FROM reading_history WHERE article_id = ?`,
+		`DELETE FROM articles WHERE id = ?`,
+	}
+	for _, statement := range statements {
+		if _, err := tx.ExecContext(ctx, statement, articleID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (r *Repository) Dashboard(ctx context.Context) (*Dashboard, error) {
@@ -366,14 +508,14 @@ func (r *Repository) ListDailyReports(ctx context.Context, userID int64, limit, 
 
 func (r *Repository) SeedFeeds(ctx context.Context, userID int64) error {
 	feeds := []model.RSSFeed{
-		{UserID: userID, URL: "https://go.dev/blog/feed.atom", Title: "Go Blog", Category: "Go", Status: "active"},
-		{UserID: userID, URL: "https://kubernetes.io/feed.xml", Title: "Kubernetes", Category: "Kubernetes", Status: "active"},
-		{UserID: userID, URL: "https://hnrss.org/frontpage", Title: "Hacker News Frontpage", Category: "Tech News", Status: "active"},
-		{UserID: userID, URL: "https://github.blog/feed/", Title: "GitHub Blog", Category: "GitHub", Status: "active"},
+		{UserID: userID, URL: "https://go.dev/blog/feed.atom", Title: "Go Blog", Category: "Go", Status: "active", FetchInterval: 360},
+		{UserID: userID, URL: "https://kubernetes.io/feed.xml", Title: "Kubernetes", Category: "Kubernetes", Status: "active", FetchInterval: 360},
+		{UserID: userID, URL: "https://hnrss.org/frontpage", Title: "Hacker News Frontpage", Category: "Tech News", Status: "active", FetchInterval: 60},
+		{UserID: userID, URL: "https://github.blog/feed/", Title: "GitHub Blog", Category: "GitHub", Status: "active", FetchInterval: 360},
 	}
 	for _, feed := range feeds {
-		_, err := r.db.ExecContext(ctx, `INSERT INTO rss_feeds (user_id, url, title, category, status)
-VALUES (?, ?, ?, ?, ?)`, feed.UserID, feed.URL, feed.Title, feed.Category, feed.Status)
+		_, err := r.db.ExecContext(ctx, `INSERT INTO rss_feeds (user_id, url, title, category, status, fetch_interval_minutes)
+VALUES (?, ?, ?, ?, ?, ?)`, feed.UserID, feed.URL, feed.Title, feed.Category, feed.Status, feed.FetchInterval)
 		if err != nil {
 			return err
 		}

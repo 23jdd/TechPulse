@@ -73,11 +73,37 @@ func (b *BleveEngine) Search(_ context.Context, query SearchQuery) (*SearchResul
 		authorQuery.SetField("author")
 		conjuncts = append(conjuncts, authorQuery)
 	}
+	if query.Source != "" {
+		sourceQuery := bleve.NewMatchQuery(query.Source)
+		sourceQuery.SetField("source_type")
+		conjuncts = append(conjuncts, sourceQuery)
+	}
+	if query.SourceID > 0 {
+		sourceID := float64(query.SourceID)
+		inclusive := true
+		sourceIDQuery := bleve.NewNumericRangeInclusiveQuery(&sourceID, &sourceID, &inclusive, &inclusive)
+		sourceIDQuery.SetField("source_id")
+		conjuncts = append(conjuncts, sourceIDQuery)
+	}
+	if query.DateFrom != nil || query.DateTo != nil {
+		start := time.Time{}
+		end := time.Time{}
+		if query.DateFrom != nil {
+			start = *query.DateFrom
+		}
+		if query.DateTo != nil {
+			end = *query.DateTo
+		}
+		inclusive := true
+		dateQuery := bleve.NewDateRangeInclusiveQuery(start, end, &inclusive, &inclusive)
+		dateQuery.SetField("published_at")
+		conjuncts = append(conjuncts, dateQuery)
+	}
 	if len(conjuncts) > 1 {
 		q = bleve.NewConjunctionQuery(conjuncts...)
 	}
 	req := bleve.NewSearchRequestOptions(q, query.PageSize, (query.Page-1)*query.PageSize, false)
-	req.Fields = []string{"id", "title", "url", "author", "summary", "tags"}
+	req.Fields = []string{"id", "title", "url", "source_type", "source_id", "author", "summary", "tags"}
 	req.Highlight = bleve.NewHighlight()
 	res, err := b.index.Search(req)
 	if err != nil {

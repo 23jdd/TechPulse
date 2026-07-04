@@ -75,7 +75,7 @@ func (h *Handler) CreateRSS(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "url is required")
 		return
 	}
-	feed := &model.RSSFeed{UserID: middleware.UserID(r), URL: req.URL, Title: req.Title, Category: req.Category, Status: "active"}
+	feed := &model.RSSFeed{UserID: middleware.UserID(r), URL: req.URL, Title: req.Title, Category: req.Category, Status: "active", FetchInterval: req.FetchIntervalMinutes}
 	if err := h.repo.CreateFeed(r.Context(), feed); err != nil {
 		response.Error(w, http.StatusInternalServerError, err.Error())
 		return
@@ -111,6 +111,46 @@ func (h *Handler) GetRSS(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, feed)
 }
 
+func (h *Handler) UpdateRSS(w http.ResponseWriter, r *http.Request) {
+	var req dto.UpdateRSSRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if strings.TrimSpace(req.URL) == "" {
+		response.Error(w, http.StatusBadRequest, "url is required")
+		return
+	}
+	status := req.Status
+	if status == "" {
+		status = "active"
+	}
+	if status != "active" && status != "disabled" {
+		response.Error(w, http.StatusBadRequest, "status must be active or disabled")
+		return
+	}
+	feed := &model.RSSFeed{
+		ID:            idParam(r, "id"),
+		UserID:        middleware.UserID(r),
+		URL:           req.URL,
+		Title:         req.Title,
+		Category:      req.Category,
+		Status:        status,
+		FetchInterval: req.FetchIntervalMinutes,
+	}
+	if err := h.repo.UpdateFeed(r.Context(), feed); err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.deleteCache(r, "rss:list:user:"+strconv.FormatInt(feed.UserID, 10))
+	updated, err := h.repo.GetFeed(r.Context(), feed.ID)
+	if err != nil {
+		response.JSON(w, http.StatusOK, feed)
+		return
+	}
+	response.JSON(w, http.StatusOK, updated)
+}
+
 func (h *Handler) DeleteRSS(w http.ResponseWriter, r *http.Request) {
 	if err := h.repo.DeleteFeed(r.Context(), idParam(r, "id")); err != nil {
 		response.Error(w, http.StatusInternalServerError, err.Error())
@@ -120,9 +160,42 @@ func (h *Handler) DeleteRSS(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, response.Envelope{"deleted": true})
 }
 
+func (h *Handler) EnableRSS(w http.ResponseWriter, r *http.Request) {
+	h.setFeedStatus(w, r, "active")
+}
+
+func (h *Handler) DisableRSS(w http.ResponseWriter, r *http.Request) {
+	h.setFeedStatus(w, r, "disabled")
+}
+
+func (h *Handler) setFeedStatus(w http.ResponseWriter, r *http.Request, status string) {
+	userID := middleware.UserID(r)
+	if err := h.repo.SetFeedStatus(r.Context(), userID, idParam(r, "id"), status); err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.deleteCache(r, "rss:list:user:"+strconv.FormatInt(userID, 10))
+	response.JSON(w, http.StatusOK, response.Envelope{"status": status})
+}
+
 func (h *Handler) FetchRSS(w http.ResponseWriter, r *http.Request) {
 	result, status := h.fetchFeed(r, idParam(r, "id"))
 	response.JSON(w, status, result)
+}
+
+func (h *Handler) TestRSS(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	feed, err := h.repo.GetFeed(r.Context(), idParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusNotFound, "feed not found")
+		return
+	}
+	out := h.testFeed(r, feed.ID, feed.URL, feed.Title, feed.Category, start)
+	status := http.StatusOK
+	if !out.OK {
+		status = http.StatusBadGateway
+	}
+	response.JSON(w, status, out)
 }
 
 func (h *Handler) fetchFeed(r *http.Request, feedID int64) (*dto.FetchRSSResponse, int) {
@@ -130,6 +203,9 @@ func (h *Handler) fetchFeed(r *http.Request, feedID int64) (*dto.FetchRSSRespons
 	feed, err := h.repo.GetFeed(ctx, feedID)
 	if err != nil {
 		return &dto.FetchRSSResponse{FeedID: feedID, Errors: []string{"feed not found"}}, http.StatusNotFound
+	}
+	if feed.Status == "disabled" {
+		return &dto.FetchRSSResponse{FeedID: feed.ID, Errors: []string{"feed is disabled"}}, http.StatusConflict
 	}
 	h.hub.Broadcast(ws.Event{Type: "fetch_started", Message: feed.URL, Time: time.Now()})
 	items, err := h.fetcher.Fetch(ctx, fetcher.Source{ID: feed.ID, Type: "rss", URL: feed.URL, Title: feed.Title, Category: feed.Category})
@@ -142,6 +218,18 @@ func (h *Handler) fetchFeed(r *http.Request, feedID int64) (*dto.FetchRSSRespons
 	_ = h.repo.MarkFeedFetched(ctx, feed.ID)
 	h.hub.Broadcast(ws.Event{Type: "fetch_finished", Message: feed.URL, Time: time.Now()})
 	return out, http.StatusOK
+}
+
+func (h *Handler) testFeed(r *http.Request, feedID int64, feedURL, title, category string, start time.Time) dto.TestRSSResponse {
+	items, err := h.fetcher.Fetch(r.Context(), fetcher.Source{ID: feedID, Type: "rss", URL: feedURL, Title: title, Category: category})
+	out := dto.TestRSSResponse{FeedID: feedID, URL: feedURL, OK: err == nil, Fetched: len(items), Duration: time.Since(start).String()}
+	if len(items) > 0 {
+		out.Title = items[0].Title
+	}
+	if err != nil {
+		out.Errors = []string{err.Error()}
+	}
+	return out
 }
 
 func (h *Handler) FetchGitHubReleases(w http.ResponseWriter, r *http.Request) {
@@ -237,14 +325,44 @@ func (h *Handler) ingestFetchedItems(r *http.Request, items []fetcher.FetchedIte
 
 func (h *Handler) ListArticles(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
-	key := fmt.Sprintf("articles:list:page:%d:size:%d", page.Page, page.PageSize)
+	filter := mysql.ArticleFilter{
+		UserID:     middleware.UserID(r),
+		SourceType: r.URL.Query().Get("source"),
+		Tag:        r.URL.Query().Get("tag"),
+		Limit:      page.PageSize,
+		Offset:     page.Offset,
+	}
+	if sourceID, err := strconv.ParseInt(r.URL.Query().Get("source_id"), 10, 64); err == nil && sourceID > 0 {
+		filter.SourceID = sourceID
+	}
+	if v, ok := parseBoolQuery(r, "read"); ok {
+		filter.IsRead = &v
+	}
+	if v, ok := parseBoolQuery(r, "favorite"); ok {
+		filter.IsFavorite = &v
+	}
+	if v, ok := parseBoolQuery(r, "read_later"); ok {
+		filter.IsReadLater = &v
+	}
+	if v, ok := parseBoolQuery(r, "archived"); ok {
+		filter.IsArchived = &v
+	}
+	if from, ok := parseDateQuery(r, "from"); ok {
+		filter.From = &from
+	}
+	if to, ok := parseDateQuery(r, "to"); ok {
+		filter.To = &to
+	}
+	key := fmt.Sprintf("articles:list:user:%d:source:%s:source_id:%d:tag:%s:read:%s:favorite:%s:read_later:%s:archived:%s:from:%s:to:%s:page:%d:size:%d",
+		filter.UserID, filter.SourceType, filter.SourceID, filter.Tag, r.URL.Query().Get("read"), r.URL.Query().Get("favorite"),
+		r.URL.Query().Get("read_later"), r.URL.Query().Get("archived"), r.URL.Query().Get("from"), r.URL.Query().Get("to"), page.Page, page.PageSize)
 	var cached []model.Article
 	if h.getCache(r, key, &cached) {
 		w.Header().Set("X-Cache", "HIT")
 		response.JSON(w, http.StatusOK, response.Envelope{"items": cached, "page": page.Page, "page_size": page.PageSize})
 		return
 	}
-	articles, err := h.repo.ListArticles(r.Context(), page.PageSize, page.Offset)
+	articles, err := h.repo.ListArticlesFiltered(r.Context(), filter)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, err.Error())
 		return
@@ -269,6 +387,36 @@ func (h *Handler) GetArticle(w http.ResponseWriter, r *http.Request) {
 	}
 	h.setCache(r, key, article, 10*time.Minute)
 	response.JSON(w, http.StatusOK, article)
+}
+
+func (h *Handler) ArchiveArticle(w http.ResponseWriter, r *http.Request) {
+	if err := h.repo.AddFavorite(r.Context(), middleware.UserID(r), idParam(r, "id"), "archived"); err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.deleteCache(r, "dashboard:v1")
+	response.JSON(w, http.StatusOK, response.Envelope{"archived": true})
+}
+
+func (h *Handler) UnarchiveArticle(w http.ResponseWriter, r *http.Request) {
+	if err := h.repo.RemoveFavorite(r.Context(), middleware.UserID(r), idParam(r, "id"), "archived"); err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, response.Envelope{"archived": false})
+}
+
+func (h *Handler) DeleteArticle(w http.ResponseWriter, r *http.Request) {
+	id := idParam(r, "id")
+	if err := h.repo.DeleteArticle(r.Context(), id); err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := h.search.DeleteArticle(r.Context(), id); err != nil {
+		h.logger.Warn("search delete failed", zap.Int64("article_id", id), zap.Error(err))
+	}
+	h.deleteCache(r, "dashboard:v1", "article:"+strconv.FormatInt(id, 10), "summary:"+strconv.FormatInt(id, 10))
+	response.JSON(w, http.StatusOK, response.Envelope{"deleted": true})
 }
 
 func (h *Handler) MarkRead(w http.ResponseWriter, r *http.Request) {
@@ -357,9 +505,19 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	page := pagination.FromRequest(r)
 	query := search.SearchQuery{
 		Query: r.URL.Query().Get("q"), Tag: r.URL.Query().Get("tag"), Author: r.URL.Query().Get("author"),
-		Page: page.Page, PageSize: page.PageSize,
+		Source: r.URL.Query().Get("source"), Page: page.Page, PageSize: page.PageSize,
 	}
-	key := fmt.Sprintf("search:q:%s:tag:%s:author:%s:page:%d:size:%d", query.Query, query.Tag, query.Author, query.Page, query.PageSize)
+	if sourceID, err := strconv.ParseInt(r.URL.Query().Get("source_id"), 10, 64); err == nil && sourceID > 0 {
+		query.SourceID = sourceID
+	}
+	if from, ok := parseDateQuery(r, "from"); ok {
+		query.DateFrom = &from
+	}
+	if to, ok := parseDateQuery(r, "to"); ok {
+		query.DateTo = &to
+	}
+	key := fmt.Sprintf("search:q:%s:tag:%s:author:%s:source:%s:source_id:%d:from:%s:to:%s:page:%d:size:%d",
+		query.Query, query.Tag, query.Author, query.Source, query.SourceID, r.URL.Query().Get("from"), r.URL.Query().Get("to"), query.Page, query.PageSize)
 	var cached search.SearchResult
 	if h.getCache(r, key, &cached) {
 		w.Header().Set("X-Cache", "HIT")
@@ -380,8 +538,12 @@ func (h *Handler) SearchExplain(w http.ResponseWriter, r *http.Request) {
 		"query":  r.URL.Query().Get("q"),
 		"fields": []string{"title^3", "summary", "content", "tags"},
 		"filters": response.Envelope{
-			"tag":    r.URL.Query().Get("tag"),
-			"author": r.URL.Query().Get("author"),
+			"tag":       r.URL.Query().Get("tag"),
+			"author":    r.URL.Query().Get("author"),
+			"source":    r.URL.Query().Get("source"),
+			"source_id": r.URL.Query().Get("source_id"),
+			"from":      r.URL.Query().Get("from"),
+			"to":        r.URL.Query().Get("to"),
 		},
 		"ranking": []string{
 			"Bleve lexical score with title boost",
@@ -662,6 +824,32 @@ func (h *Handler) WebSocket(w http.ResponseWriter, r *http.Request) {
 func idParam(r *http.Request, name string) int64 {
 	id, _ := strconv.ParseInt(chi.URLParam(r, name), 10, 64)
 	return id
+}
+
+func parseBoolQuery(r *http.Request, name string) (bool, bool) {
+	raw := r.URL.Query().Get(name)
+	if raw == "" {
+		return false, false
+	}
+	value, err := strconv.ParseBool(raw)
+	return value, err == nil
+}
+
+func parseDateQuery(r *http.Request, name string) (time.Time, bool) {
+	raw := strings.TrimSpace(r.URL.Query().Get(name))
+	if raw == "" {
+		return time.Time{}, false
+	}
+	if t, err := time.Parse(time.DateOnly, raw); err == nil {
+		if name == "to" {
+			t = t.Add(24*time.Hour - time.Nanosecond)
+		}
+		return t, true
+	}
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return t, true
+	}
+	return time.Time{}, false
 }
 
 func uniqueStrings(values []string) []string {
