@@ -97,7 +97,7 @@ make demo
 
 ## Web UI
 
-A Tailwind dashboard is served by the gateway at `http://localhost:8080/` and `http://localhost:8080/dashboard`. The Chinese UI is available at `http://localhost:8080/zh` and `http://localhost:8080/dashboard/zh`. It provides feed management, article fetch, search, article preview, summary, RAG chat, and daily report generation over the REST API.
+A Tailwind dashboard is served by the gateway at `http://localhost:8080/` and `http://localhost:8080/dashboard`. The login page is available at `http://localhost:8080/login`. The Chinese UI is available at `http://localhost:8080/zh`, `http://localhost:8080/dashboard/zh`, and `http://localhost:8080/login/zh`. It provides feed management, article fetch, search, article preview, summary, RAG chat, and daily report generation over the REST API.
 
 ## Feature Status
 
@@ -117,7 +117,7 @@ A Tailwind dashboard is served by the gateway at `http://localhost:8080/` and `h
 | Bleve Search | Working | Title/content/summary/tag/source/date search, boost, filters, highlight |
 | RAG Chat | Basic Working | Retrieves top articles and returns citations |
 | WebSocket Events | Working | Emits fetch/index/new article events |
-| GitHub OAuth | Basic Working | Auth URL, callback, GitHub user upsert |
+| Login / GitHub OAuth | Basic Working | Login page, Auth URL, callback, GitHub user upsert |
 | Email Sending | Basic Working | SMTP test mail and daily report delivery |
 | RabbitMQ / etcd | Partial | Real client implementations, service skeletons |
 | Reddit / Arxiv / YouTube | Stub | Fetcher interface prepared |

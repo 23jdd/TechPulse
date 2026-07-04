@@ -19,6 +19,12 @@ func New(h *handler.Handler, logger *zap.Logger, defaultUserID int64) http.Handl
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/dashboard.html")
 	})
+	r.Get("/login", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/login.html")
+	})
+	r.Get("/login/zh", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "web/login.zh-CN.html")
+	})
 	r.Get("/zh", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "web/dashboard.zh-CN.html")
 	})

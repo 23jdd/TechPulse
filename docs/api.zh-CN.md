@@ -3,6 +3,8 @@
 基础地址：`http://localhost:8080`
 
 - `GET /health` 返回 gateway 和 Redis 缓存状态
+- `GET /login` 返回英文登录页
+- `GET /login/zh` 返回中文登录页
 - `POST /api/v1/rss`，请求体：`{"url":"https://go.dev/blog/feed.atom","title":"Go Blog","category":"Go","fetch_interval_minutes":360}`
 - `GET /api/v1/rss`
 - `PUT /api/v1/rss/{id}`，请求体：`{"url":"...","title":"...","category":"Go","status":"active","fetch_interval_minutes":120}`
@@ -40,6 +42,7 @@
 - `GET /api/v1/opml`
 - `POST /api/v1/opml`，请求体为 OPML XML
 - `GET /api/v1/auth/github/url`
+- `GET /api/v1/auth/github/url?ui=1` 返回浏览器登录使用的 GitHub OAuth URL
 - `GET /api/v1/auth/github/callback?code=...&state=...`
 - `POST /api/v1/email/test`，请求体：`{"to":"you@example.com","subject":"TechPulse","body":"SMTP is working"}`
 - `POST /api/v1/daily-reports`，请求体：`{"title":"Today AI"}`

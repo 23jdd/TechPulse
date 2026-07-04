@@ -4,9 +4,16 @@
 
 Open `http://localhost:8080/` or `http://localhost:8080/dashboard` after the gateway is running.
 
+Login page:
+
+```text
+http://localhost:8080/login
+```
+
 Chinese UI:
 
 ```text
+http://localhost:8080/login/zh
 http://localhost:8080/zh
 http://localhost:8080/dashboard/zh
 ```

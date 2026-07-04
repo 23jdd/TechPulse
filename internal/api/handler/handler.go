@@ -711,6 +711,9 @@ func (h *Handler) GitHubAuthURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	state := randomState()
+	if r.URL.Query().Get("ui") == "1" {
+		state = "ui:" + r.URL.Query().Get("locale") + ":" + state
+	}
 	authURL, err := h.oauth.AuthURL(state)
 	if err != nil {
 		response.Error(w, http.StatusServiceUnavailable, err.Error())
@@ -739,7 +742,38 @@ func (h *Handler) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if strings.HasPrefix(r.URL.Query().Get("state"), "ui:") {
+		h.renderOAuthSuccess(w, user, githubUser.APIToken, strings.HasPrefix(r.URL.Query().Get("state"), "ui:zh:"))
+		return
+	}
 	response.JSON(w, http.StatusOK, response.Envelope{"user": user, "api_token": githubUser.APIToken})
+}
+
+func (h *Handler) renderOAuthSuccess(w http.ResponseWriter, user *model.User, token string, zh bool) {
+	userJSON, _ := json.Marshal(user)
+	tokenJSON, _ := json.Marshal(token)
+	redirect := "/dashboard"
+	title := "Signed in"
+	message := "GitHub login succeeded. Redirecting to dashboard..."
+	if zh {
+		redirect = "/dashboard/zh"
+		title = "登录成功"
+		message = "GitHub 登录成功，正在进入控制台..."
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = fmt.Fprintf(w, `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>%s - TechPulse</title></head>
+<body style="font-family:system-ui,sans-serif;background:#f6f7f9;color:#17202a;display:grid;place-items:center;min-height:100vh;margin:0">
+<main style="background:white;border:1px solid #d9dee7;border-radius:8px;padding:24px;max-width:420px">
+<h1 style="margin:0 0 8px;font-size:20px">%s</h1>
+<p style="color:#667085">%s</p>
+</main>
+<script>
+localStorage.setItem("techpulse_api_token", %s);
+localStorage.setItem("techpulse_session", JSON.stringify({mode:"github", user:%s}));
+setTimeout(function(){ window.location.href = %q; }, 600);
+</script></body></html>`, title, title, message, string(tokenJSON), string(userJSON), redirect)
 }
 
 func (h *Handler) SendTestEmail(w http.ResponseWriter, r *http.Request) {

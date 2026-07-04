@@ -55,6 +55,11 @@
         <p class="text-xs font-medium text-muted">Gateway</p>
         <p id="health" class="mt-1 text-sm font-semibold text-ink">checking...</p>
       </div>
+      <div class="mx-4 mt-3 rounded-lg border border-line bg-slate-50 p-3">
+        <p class="text-xs font-medium text-muted">Session</p>
+        <p id="session" class="mt-1 truncate text-sm font-semibold text-ink">guest</p>
+      </div>
+      <a href="/login" class="mx-4 mt-3 block rounded-md bg-brand px-3 py-2 text-center text-sm font-medium text-white hover:bg-brandDark">Login</a>
       <a href="/dashboard/zh" class="mx-4 mt-3 block rounded-md border border-line bg-white px-3 py-2 text-center text-sm text-muted hover:bg-slate-50">中文</a>
     </aside>
 
@@ -205,8 +210,9 @@
     const API = localStorage.getItem("techpulse_api") || window.location.origin || "http://localhost:8080";
 
     async function request(path, options = {}) {
+      const token = localStorage.getItem("techpulse_api_token");
       const res = await fetch(API + path, {
-        headers: {"Content-Type": "application/json", ...(options.headers || {})},
+        headers: {"Content-Type": "application/json", ...(token ? {"Authorization": `Bearer ${token}`} : {}), ...(options.headers || {})},
         ...options,
       });
       if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
@@ -222,6 +228,15 @@
 
     function icon() {
       if (window.lucide) window.lucide.createIcons();
+    }
+
+    function loadSession() {
+      try {
+        const session = JSON.parse(localStorage.getItem("techpulse_session") || "{}");
+        document.getElementById("session").textContent = session.user?.username || session.user || session.mode || "guest";
+      } catch {
+        document.getElementById("session").textContent = "guest";
+      }
     }
 
     async function checkHealth() {
@@ -504,6 +519,7 @@
     }
 
     checkHealth();
+    loadSession();
     loadDashboard();
     loadFeeds();
     loadArticles();

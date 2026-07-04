@@ -76,6 +76,8 @@ curl -X POST http://localhost:8080/api/v1/github/releases/fetch \
 
 Tailwind Dashboard 由 gateway 直接提供：
 
+- 登录页：`http://localhost:8080/login`
+- 中文登录页：`http://localhost:8080/login/zh`
 - 英文版：`http://localhost:8080/`
 - 中文版：`http://localhost:8080/zh`
 - 中文 Dashboard：`http://localhost:8080/dashboard/zh`
@@ -107,7 +109,7 @@ Tailwind Dashboard 由 gateway 直接提供：
 | Bleve 搜索 | 已完成 | 标题、正文、摘要、标签、来源、日期过滤、高亮 |
 | RAG 问答 | 基础可用 | 检索相关文章并返回引用 |
 | WebSocket 事件 | 已完成 | 抓取、索引、新文章事件推送 |
-| GitHub OAuth | 基础可用 | Auth URL、callback、GitHub 用户 upsert |
+| 登录 / GitHub OAuth | 基础可用 | 登录页、Auth URL、callback、GitHub 用户 upsert |
 | 邮件发送 | 基础可用 | SMTP 测试邮件和日报发送 |
 | RabbitMQ / etcd | 部分完成 | 真实客户端和服务骨架 |
 | Reddit / Arxiv / YouTube | 预留 | Fetcher 接口已准备 |

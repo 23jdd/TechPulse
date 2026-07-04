@@ -3,6 +3,8 @@
 Base URL: `http://localhost:8080`
 
 - `GET /health` returns gateway and Redis cache status
+- `GET /login` serves the English login page
+- `GET /login/zh` serves the Chinese login page
 - `POST /api/v1/rss` with `{"url":"https://go.dev/blog/feed.atom","title":"Go Blog","category":"Go","fetch_interval_minutes":360}`
 - `GET /api/v1/rss`
 - `PUT /api/v1/rss/{id}` with `{"url":"...","title":"...","category":"Go","status":"active","fetch_interval_minutes":120}`
@@ -40,6 +42,7 @@ User features:
 - `GET /api/v1/opml`
 - `POST /api/v1/opml` with an OPML XML request body
 - `GET /api/v1/auth/github/url`
+- `GET /api/v1/auth/github/url?ui=1` returns a GitHub OAuth URL for browser login
 - `GET /api/v1/auth/github/callback?code=...&state=...`
 - `POST /api/v1/email/test` with `{"to":"you@example.com","subject":"TechPulse","body":"SMTP is working"}`
 - `POST /api/v1/daily-reports` with `{"title":"Today AI"}`

@@ -3,6 +3,7 @@
 gateway 启动后打开：
 
 ```text
+http://localhost:8080/login
 http://localhost:8080/
 http://localhost:8080/dashboard
 ```
@@ -10,6 +11,7 @@ http://localhost:8080/dashboard
 中文页面：
 
 ```text
+http://localhost:8080/login/zh
 http://localhost:8080/zh
 http://localhost:8080/dashboard/zh
 ```
