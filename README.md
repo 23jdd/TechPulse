@@ -31,6 +31,14 @@ Most blog projects are CRUD demos. TechPulse shows backend system design around 
 
 ## 3-Minute Demo
 
+Direct Docker deployment:
+
+```bash
+docker compose up -d --build
+```
+
+Open `http://localhost:8080/login` or `http://localhost:8080/login/zh`.
+
 Start local infrastructure and the gateway:
 
 ```bash

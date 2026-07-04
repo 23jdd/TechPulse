@@ -1,6 +1,50 @@
 # 部署
 
-启动本地依赖：
+## 一条命令 Docker Compose 部署
+
+在项目根目录执行：
+
+```bash
+docker compose up -d --build
+```
+
+打开：
+
+```text
+http://localhost:8080/login
+http://localhost:8080/login/zh
+http://localhost:8080/dashboard
+http://localhost:8080/dashboard/zh
+```
+
+可选：导入 demo Feed：
+
+```bash
+docker compose --profile tools run --rm seed
+```
+
+查看状态和日志：
+
+```bash
+docker compose ps
+docker compose logs -f gateway
+```
+
+停止服务：
+
+```bash
+docker compose down
+```
+
+删除持久化数据：
+
+```bash
+docker compose down -v
+```
+
+## 本地 Go 开发
+
+只启动本地依赖：
 
 ```bash
 make docker-up
@@ -9,7 +53,7 @@ make seed
 make run
 ```
 
-启动完整 compose stack：
+## 旧 compose 文件
 
 ```bash
 docker compose -f deploy/docker-compose.yml up -d --build

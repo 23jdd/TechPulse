@@ -1,0 +1,266 @@
+name: techpulse
+
+x-app-build: &app-build
+  context: .
+  dockerfile: deploy/Dockerfile
+
+x-app-env: &app-env
+  APP_ENV: ${APP_ENV:-prod}
+  MYSQL_DSN: ${MYSQL_DSN:-root:password@tcp(mysql:3306)/techpulse?parseTime=true&charset=utf8mb4&multiStatements=true}
+  REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+  RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+  ETCD_ENDPOINTS: ${ETCD_ENDPOINTS:-etcd:2379}
+  MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+  MINIO_BUCKET: ${MINIO_BUCKET:-techpulse}
+  AI_PROVIDER: ${AI_PROVIDER:-mock}
+  AI_BASE_URL: ${AI_BASE_URL:-https://api.openai.com/v1}
+  AI_API_KEY: ${AI_API_KEY:-}
+  AI_MODEL: ${AI_MODEL:-gpt-4o-mini}
+  GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+  GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+  GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+  GITHUB_REDIRECT_URL: ${GITHUB_REDIRECT_URL:-http://localhost:8080/api/v1/auth/github/callback}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USERNAME: ${SMTP_USERNAME:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_FROM: ${SMTP_FROM:-}
+  DEFAULT_USER_ID: ${DEFAULT_USER_ID:-1}
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-techpulse}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./deploy/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD:-password}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    restart: unless-stopped
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.15
+    restart: unless-stopped
+    command:
+      - etcd
+      - --name=techpulse-etcd
+      - --data-dir=/etcd-data
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --initial-advertise-peer-urls=http://etcd:2380
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-cluster=techpulse-etcd=http://etcd:2380
+      - --initial-cluster-token=techpulse
+      - --initial-cluster-state=new
+    ports:
+      - "${ETCD_PORT:-2379}:2379"
+    volumes:
+      - etcd-data:/etcd-data
+    healthcheck:
+      test: ["CMD", "etcdctl", "--endpoints=http://localhost:2379", "endpoint", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+
+  gateway:
+    build: *app-build
+    image: techpulse/app:${TECHPULSE_TAG:-latest}
+    restart: unless-stopped
+    command: ["gateway"]
+    environment:
+      <<: *app-env
+      HTTP_PORT: 8080
+      BLEVE_INDEX_PATH: /app/data/gateway-bleve
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    volumes:
+      - gateway-data:/app/data
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  scheduler:
+    image: techpulse/app:${TECHPULSE_TAG:-latest}
+    restart: unless-stopped
+    command: ["scheduler"]
+    environment:
+      <<: *app-env
+    ports:
+      - "${SCHEDULER_PORT:-8081}:8081"
+    depends_on:
+      gateway:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+      etcd:
+        condition: service_healthy
+
+  fetcher:
+    image: techpulse/app:${TECHPULSE_TAG:-latest}
+    restart: unless-stopped
+    command: ["fetcher"]
+    environment:
+      <<: *app-env
+    ports:
+      - "${FETCHER_PORT:-8082}:8082"
+    depends_on:
+      gateway:
+        condition: service_started
+      etcd:
+        condition: service_healthy
+
+  parser:
+    image: techpulse/app:${TECHPULSE_TAG:-latest}
+    restart: unless-stopped
+    command: ["parser"]
+    environment:
+      <<: *app-env
+    ports:
+      - "${PARSER_PORT:-8083}:8083"
+    depends_on:
+      gateway:
+        condition: service_started
+      etcd:
+        condition: service_healthy
+
+  ai-pipeline:
+    image: techpulse/app:${TECHPULSE_TAG:-latest}
+    restart: unless-stopped
+    command: ["ai-pipeline"]
+    environment:
+      <<: *app-env
+    ports:
+      - "${AI_PIPELINE_PORT:-8084}:8084"
+    depends_on:
+      gateway:
+        condition: service_started
+      etcd:
+        condition: service_healthy
+
+  search:
+    image: techpulse/app:${TECHPULSE_TAG:-latest}
+    restart: unless-stopped
+    command: ["search"]
+    environment:
+      <<: *app-env
+      BLEVE_INDEX_PATH: /app/data/search-bleve
+    ports:
+      - "${SEARCH_PORT:-8085}:8085"
+    volumes:
+      - search-data:/app/data
+    depends_on:
+      gateway:
+        condition: service_started
+      etcd:
+        condition: service_healthy
+
+  rag:
+    image: techpulse/app:${TECHPULSE_TAG:-latest}
+    restart: unless-stopped
+    command: ["rag"]
+    environment:
+      <<: *app-env
+      BLEVE_INDEX_PATH: /app/data/search-bleve
+    ports:
+      - "${RAG_PORT:-8086}:8086"
+    volumes:
+      - search-data:/app/data
+    depends_on:
+      gateway:
+        condition: service_started
+      etcd:
+        condition: service_healthy
+
+  worker:
+    image: techpulse/app:${TECHPULSE_TAG:-latest}
+    restart: unless-stopped
+    command: ["worker"]
+    environment:
+      <<: *app-env
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  seed:
+    image: techpulse/app:${TECHPULSE_TAG:-latest}
+    profiles: ["tools"]
+    command: ["worker", "-mode=seed"]
+    environment:
+      <<: *app-env
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql-data:
+  redis-data:
+  rabbitmq-data:
+  etcd-data:
+  minio-data:
+  gateway-data:
+  search-data:
