@@ -1,8 +1,12 @@
 package handler
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -16,9 +20,11 @@ import (
 	"techpulse/internal/duplicate"
 	"techpulse/internal/fetcher"
 	"techpulse/internal/model"
+	"techpulse/internal/opml"
 	"techpulse/internal/parser"
 	"techpulse/internal/pipeline"
 	"techpulse/internal/rag"
+	"techpulse/internal/report"
 	"techpulse/internal/search"
 	"techpulse/internal/storage/mysql"
 	ws "techpulse/internal/websocket"
@@ -186,6 +192,14 @@ func (h *Handler) GetArticle(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, article)
 }
 
+func (h *Handler) MarkRead(w http.ResponseWriter, r *http.Request) {
+	if err := h.repo.MarkArticleRead(r.Context(), middleware.UserID(r), idParam(r, "id")); err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, response.Envelope{"read": true})
+}
+
 func (h *Handler) GetArticleSummary(w http.ResponseWriter, r *http.Request) {
 	summary, err := h.repo.GetSummary(r.Context(), idParam(r, "id"))
 	if err != nil {
@@ -203,12 +217,52 @@ func (h *Handler) AddFavorite(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, response.Envelope{"favorite": true})
 }
 
+func (h *Handler) AddReadLater(w http.ResponseWriter, r *http.Request) {
+	if err := h.repo.AddFavorite(r.Context(), middleware.UserID(r), idParam(r, "id"), "read_later"); err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, response.Envelope{"read_later": true})
+}
+
 func (h *Handler) RemoveFavorite(w http.ResponseWriter, r *http.Request) {
 	if err := h.repo.RemoveFavorite(r.Context(), middleware.UserID(r), idParam(r, "id"), "favorite"); err != nil {
 		response.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	response.JSON(w, http.StatusOK, response.Envelope{"favorite": false})
+}
+
+func (h *Handler) RemoveReadLater(w http.ResponseWriter, r *http.Request) {
+	if err := h.repo.RemoveFavorite(r.Context(), middleware.UserID(r), idParam(r, "id"), "read_later"); err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, response.Envelope{"read_later": false})
+}
+
+func (h *Handler) ListFavorites(w http.ResponseWriter, r *http.Request) {
+	page := pagination.FromRequest(r)
+	typ := r.URL.Query().Get("type")
+	if typ == "" {
+		typ = "favorite"
+	}
+	articles, err := h.repo.ListFavorites(r.Context(), middleware.UserID(r), typ, page.PageSize, page.Offset)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, response.Envelope{"items": articles, "type": typ})
+}
+
+func (h *Handler) ReadingHistory(w http.ResponseWriter, r *http.Request) {
+	page := pagination.FromRequest(r)
+	articles, err := h.repo.ReadingHistory(r.Context(), middleware.UserID(r), page.PageSize, page.Offset)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, response.Envelope{"items": articles})
 }
 
 func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
@@ -267,12 +321,128 @@ func (h *Handler) Chat(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "question is required")
 		return
 	}
-	answer, err := h.rag.Ask(r.Context(), req.Question)
+	answer, err := h.rag.AskWithConversation(r.Context(), req.Question, middleware.UserID(r), req.ConversationID)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	response.JSON(w, http.StatusOK, answer)
+}
+
+func (h *Handler) ListConversations(w http.ResponseWriter, r *http.Request) {
+	conversations, err := h.repo.ListConversations(r.Context(), middleware.UserID(r))
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, response.Envelope{"items": conversations})
+}
+
+func (h *Handler) ListPrompts(w http.ResponseWriter, r *http.Request) {
+	prompts, err := h.repo.ListPrompts(r.Context(), middleware.UserID(r))
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, response.Envelope{"items": prompts})
+}
+
+func (h *Handler) UpsertPrompt(w http.ResponseWriter, r *http.Request) {
+	var req dto.PromptRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if strings.TrimSpace(req.Name) == "" || strings.TrimSpace(req.Content) == "" {
+		response.Error(w, http.StatusBadRequest, "name and content are required")
+		return
+	}
+	prompt := &mysql.UserPrompt{UserID: middleware.UserID(r), Name: req.Name, Content: req.Content, IsDefault: req.IsDefault}
+	if err := h.repo.UpsertPrompt(r.Context(), prompt); err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, prompt)
+}
+
+func (h *Handler) DeletePrompt(w http.ResponseWriter, r *http.Request) {
+	if err := h.repo.DeletePrompt(r.Context(), middleware.UserID(r), idParam(r, "id")); err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, response.Envelope{"deleted": true})
+}
+
+func (h *Handler) ExportOPML(w http.ResponseWriter, r *http.Request) {
+	feeds, err := h.repo.ListFeeds(r.Context(), middleware.UserID(r))
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "text/x-opml; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="techpulse-feeds.opml"`)
+	if err := opml.Encode(w, feeds); err != nil {
+		h.logger.Warn("opml export failed", zap.Error(err))
+	}
+}
+
+func (h *Handler) ImportOPML(w http.ResponseWriter, r *http.Request) {
+	feeds, err := opml.Decode(r.Body)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var imported int
+	for _, feed := range feeds {
+		feed.UserID = middleware.UserID(r)
+		if feed.Status == "" {
+			feed.Status = "active"
+		}
+		if err := h.repo.CreateFeed(r.Context(), &feed); err == nil {
+			imported++
+		}
+	}
+	response.JSON(w, http.StatusOK, response.Envelope{"imported": imported})
+}
+
+func (h *Handler) GitHubAuthURL(w http.ResponseWriter, r *http.Request) {
+	clientID := strings.TrimSpace(r.URL.Query().Get("client_id"))
+	if clientID == "" {
+		clientID = "configure-GITHUB_CLIENT_ID"
+	}
+	redirectURI := strings.TrimSpace(r.URL.Query().Get("redirect_uri"))
+	if redirectURI == "" {
+		redirectURI = "http://localhost:8080/api/v1/auth/github/callback"
+	}
+	state := randomState()
+	values := url.Values{}
+	values.Set("client_id", clientID)
+	values.Set("redirect_uri", redirectURI)
+	values.Set("scope", "read:user user:email")
+	values.Set("state", state)
+	response.JSON(w, http.StatusOK, response.Envelope{"url": "https://github.com/login/oauth/authorize?" + values.Encode(), "state": state})
+}
+
+func (h *Handler) GenerateDailyReport(w http.ResponseWriter, r *http.Request) {
+	var req dto.ReportRequest
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	reportSvc := report.NewService(h.repo)
+	daily, err := reportSvc.Generate(r.Context(), middleware.UserID(r), req.Title)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusCreated, daily)
+}
+
+func (h *Handler) ListDailyReports(w http.ResponseWriter, r *http.Request) {
+	page := pagination.FromRequest(r)
+	reports, err := h.repo.ListDailyReports(r.Context(), middleware.UserID(r), page.PageSize, page.Offset)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, response.Envelope{"items": reports})
 }
 
 func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
@@ -307,4 +477,12 @@ func uniqueStrings(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func randomState() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b[:])
 }

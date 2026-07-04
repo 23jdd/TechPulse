@@ -24,3 +24,5 @@ Service communication:
 - HTTP: fetcher `/fetch`, parser `/parse`, ai-pipeline `/process`, search `/index` and `/search`, rag `/chat`.
 - RabbitMQ: `fetch`, `parse`, `ai`, `index`, and `daily_report` queues.
 - etcd: service registration under `/techpulse/services/*` and distributed locks under `/techpulse/locks/*`.
+- Hybrid retrieval: Bleve provides lexical recall, then the AI provider embedding API reranks top hits when configured.
+- RAG memory: conversations and messages are stored in MySQL and recent turns are included in generation prompts.

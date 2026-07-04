@@ -12,6 +12,24 @@ Base URL: `http://localhost:8080`
 - `GET /api/v1/dashboard`
 - `GET /ws`
 
+User features:
+
+- `POST /api/v1/articles/{id}/read`
+- `POST /api/v1/articles/{id}/read-later`
+- `DELETE /api/v1/articles/{id}/read-later`
+- `GET /api/v1/favorites?type=favorite`
+- `GET /api/v1/favorites?type=read_later`
+- `GET /api/v1/reading-history`
+- `GET /api/v1/conversations`
+- `GET /api/v1/prompts`
+- `POST /api/v1/prompts` with `{"name":"release analyst","content":"Focus on migrations.","is_default":true}`
+- `DELETE /api/v1/prompts/{id}`
+- `GET /api/v1/opml`
+- `POST /api/v1/opml` with an OPML XML request body
+- `GET /api/v1/auth/github/url`
+- `POST /api/v1/daily-reports` with `{"title":"Today AI"}`
+- `GET /api/v1/daily-reports`
+
 ## Phase 2 Service APIs
 
 Fetcher service, port `8082`:

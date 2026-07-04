@@ -22,11 +22,12 @@ func main() {
 	}
 	defer func() { _ = logger.Sync() }()
 
-	engine, err := searchengine.NewBleveEngine(cfg.BleveIndexPath)
+	bleveEngine, err := searchengine.NewBleveEngine(cfg.BleveIndexPath)
 	if err != nil {
 		logger.Fatal("open bleve", zap.Error(err))
 	}
-	defer engine.Close()
+	defer bleveEngine.Close()
+	engine := searchengine.NewHybridEngine(bleveEngine, service.AIProvider(cfg, http.DefaultClient))
 
 	service.RegisterSelf(context.Background(), cfg, "search", 8085, logger)
 	server := service.NewServer("search", 8085, logger)

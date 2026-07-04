@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"techpulse/internal/ai"
+	"techpulse/internal/model"
 	"techpulse/internal/search"
 )
 
@@ -17,7 +18,21 @@ func NewGenerator(provider ai.Provider) *Generator {
 }
 
 func (g *Generator) Generate(ctx context.Context, question string, hits []search.SearchHit) (string, error) {
+	return g.GenerateWithHistory(ctx, question, hits, nil)
+}
+
+func (g *Generator) GenerateWithHistory(ctx context.Context, question string, hits []search.SearchHit, history []model.Message) (string, error) {
 	var b strings.Builder
+	if len(history) > 0 {
+		b.WriteString("Recent conversation:\n")
+		for _, msg := range history {
+			b.WriteString(msg.Role)
+			b.WriteString(": ")
+			b.WriteString(msg.Content)
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
 	b.WriteString("Question: ")
 	b.WriteString(question)
 	b.WriteString("\nUse these cited articles:\n")

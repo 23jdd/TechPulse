@@ -54,14 +54,15 @@ func main() {
 		logger.Fatal("ensure default user", zap.Error(err))
 	}
 
-	engine, err := search.NewBleveEngine(cfg.BleveIndexPath)
+	bleveEngine, err := search.NewBleveEngine(cfg.BleveIndexPath)
 	if err != nil {
 		logger.Fatal("open bleve", zap.Error(err))
 	}
-	defer engine.Close()
+	defer bleveEngine.Close()
 
 	client := httpclient.New(cfg.RequestTimeout)
 	provider := aiProvider(cfg, client)
+	engine := search.NewHybridEngine(bleveEngine, provider)
 	hub := ws.NewHub()
 	go hub.Run()
 
@@ -76,7 +77,7 @@ func main() {
 	parserSvc := parser.NewService()
 	duplicateSvc := duplicate.NewService(repo)
 	pipelineSvc := pipeline.NewService(provider)
-	ragSvc := rag.NewService(rag.NewRetriever(engine), rag.NewGenerator(provider))
+	ragSvc := rag.NewService(rag.NewRetriever(engine), rag.NewGenerator(provider)).WithMemory(repo)
 	handler := apihandler.New(repo, fetchSvc, parserSvc, duplicateSvc, pipelineSvc, engine, ragSvc, provider, hub, logger)
 
 	server := &http.Server{

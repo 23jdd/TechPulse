@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: techpulse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+        - name: worker
+          image: techpulse:latest
+          imagePullPolicy: IfNotPresent
+          command: ["worker"]
+          envFrom:
+            - configMapRef:
+                name: techpulse-config
+          env:
+            - name: MYSQL_DSN
+              value: root:password@tcp(mysql:3306)/techpulse?parseTime=true&charset=utf8mb4&multiStatements=true

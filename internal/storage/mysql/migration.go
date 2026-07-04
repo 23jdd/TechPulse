@@ -135,7 +135,28 @@ CREATE TABLE IF NOT EXISTS messages (
   role VARCHAR(32) NOT NULL,
   content MEDIUMTEXT NOT NULL,
   citations MEDIUMTEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_messages_conversation (conversation_id, created_at)
+);
+
+CREATE TABLE IF NOT EXISTS reading_history (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT NOT NULL,
+  article_id BIGINT NOT NULL,
+  read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_reading_history_user_article (user_id, article_id),
+  INDEX idx_reading_history_user (user_id, read_at)
+);
+
+CREATE TABLE IF NOT EXISTS user_prompts (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  content MEDIUMTEXT NOT NULL,
+  is_default BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_user_prompts_name (user_id, name)
 );
 
 CREATE TABLE IF NOT EXISTS daily_reports (

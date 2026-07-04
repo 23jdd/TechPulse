@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+      - name: Tidy check
+        run: go mod tidy
+      - name: Test
+        run: go test ./...
+      - name: Build
+        run: go build ./...
+      - name: Compose config
+        run: docker compose -f deploy/docker-compose.yml config

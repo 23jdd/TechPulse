@@ -29,6 +29,9 @@ Phase 2 adds independently runnable HTTP services for fetch, parse, AI processin
 - URL/content hash deduplication
 - Mock AI summaries, tags, keywords, translation, and embeddings
 - Optional OpenAI-compatible chat provider
+- OpenAI-compatible embeddings endpoint support
+- Hybrid Bleve + embedding reranking
+- Conversation memory for RAG chat
 - MySQL persistence
 - Bleve full-text search with highlights
 - Simple RAG chat with citations
@@ -37,6 +40,8 @@ Phase 2 adds independently runnable HTTP services for fetch, parse, AI processin
 - Standalone microservice endpoints for Phase 2 service-to-service HTTP calls
 - RabbitMQ publisher/consumer implementation for async jobs
 - etcd-backed service registry and distributed lock implementation
+- OPML import/export, read later, reading history, user prompts, daily reports
+- Kubernetes starter manifests and GitHub Actions CI
 
 ## Run
 
@@ -81,6 +86,16 @@ curl "http://localhost:8080/api/v1/search?q=go&page=1&page_size=20"
 curl -X POST http://localhost:8080/api/v1/chat \
   -H "Content-Type: application/json" \
   -d '{"question":"What is new in Go?","conversation_id":1}'
+
+curl http://localhost:8080/api/v1/opml
+
+curl -X POST http://localhost:8080/api/v1/prompts \
+  -H "Content-Type: application/json" \
+  -d '{"name":"release analyst","content":"Focus on breaking changes and migration work.","is_default":true}'
+
+curl -X POST http://localhost:8080/api/v1/daily-reports \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Today Go"}'
 ```
 
 ## Environment
@@ -103,6 +118,13 @@ Copy `.env.example` or export the variables directly. Important defaults:
 - `cmd/rag`: exposes `POST /chat` using Bleve retrieval and AI generation.
 - `cmd/worker`: migration, seed, and RabbitMQ consumer for fetch, parse, AI, index, and daily report queues.
 
+## Production
+
+- Prometheus-ready endpoint: `GET /metrics`
+- Kubernetes starter manifests: `deploy/k8s`
+- CI: `.github/workflows/ci.yml`
+- Docker Compose validates and runs the full local stack.
+
 ## Database
 
 The gateway and worker can create the schema automatically. Tables include users, feeds, articles, tags, article tags, favorites, summaries, translations, embeddings, tasks, conversations, messages, and daily reports. Embeddings are stored as JSON text in the MVP.
@@ -118,4 +140,4 @@ make clean
 
 ## Roadmap
 
-Phase 2 moves service communication to RabbitMQ and HTTP service clients. Later phases add richer AI providers, hybrid search, OAuth, OPML, delivery integrations, tracing, dashboards, Kubernetes manifests, and load testing.
+Phase 3-5 add OpenAI-compatible embeddings, hybrid search, conversation memory, OAuth-ready auth URLs, OPML, read later, reading history, user prompts, daily reports, Kubernetes starter manifests, and CI.

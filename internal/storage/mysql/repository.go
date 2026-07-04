@@ -33,6 +33,16 @@ type Dashboard struct {
 	AITokenCost      string   `json:"ai_token_cost"`
 }
 
+type UserPrompt struct {
+	ID        int64     `db:"id" json:"id"`
+	UserID    int64     `db:"user_id" json:"user_id"`
+	Name      string    `db:"name" json:"name"`
+	Content   string    `db:"content" json:"content"`
+	IsDefault bool      `db:"is_default" json:"is_default"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
+}
+
 func NewRepository(db *sqlx.DB) *Repository {
 	return &Repository{db: db}
 }
@@ -173,6 +183,22 @@ func (r *Repository) GetArticle(ctx context.Context, id int64) (*model.Article, 
 	return &article, nil
 }
 
+func (r *Repository) MarkArticleRead(ctx context.Context, userID, articleID int64) error {
+	_, err := r.db.ExecContext(ctx, `INSERT INTO reading_history (user_id, article_id, read_at)
+VALUES (?, ?, NOW()) ON DUPLICATE KEY UPDATE read_at = NOW()`, userID, articleID)
+	return err
+}
+
+func (r *Repository) ReadingHistory(ctx context.Context, userID int64, limit, offset int) ([]model.Article, error) {
+	var articles []model.Article
+	err := r.db.SelectContext(ctx, &articles, `SELECT a.* FROM articles a
+JOIN reading_history h ON h.article_id = a.id
+WHERE h.user_id = ?
+ORDER BY h.read_at DESC
+LIMIT ? OFFSET ?`, userID, limit, offset)
+	return articles, err
+}
+
 func (r *Repository) GetSummary(ctx context.Context, articleID int64) (*model.Summary, error) {
 	var summary model.Summary
 	if err := r.db.GetContext(ctx, &summary, `SELECT * FROM summaries WHERE article_id = ?`, articleID); err != nil {
@@ -190,6 +216,16 @@ func (r *Repository) TagsForArticle(ctx context.Context, articleID int64) ([]str
 func (r *Repository) AddFavorite(ctx context.Context, userID, articleID int64, typ string) error {
 	_, err := r.db.ExecContext(ctx, `INSERT IGNORE INTO favorites (user_id, article_id, type) VALUES (?, ?, ?)`, userID, articleID, defaultString(typ, "favorite"))
 	return err
+}
+
+func (r *Repository) ListFavorites(ctx context.Context, userID int64, typ string, limit, offset int) ([]model.Article, error) {
+	var articles []model.Article
+	err := r.db.SelectContext(ctx, &articles, `SELECT a.* FROM articles a
+JOIN favorites f ON f.article_id = a.id
+WHERE f.user_id = ? AND f.type = ?
+ORDER BY f.created_at DESC
+LIMIT ? OFFSET ?`, userID, defaultString(typ, "favorite"), limit, offset)
+	return articles, err
 }
 
 func (r *Repository) RemoveFavorite(ctx context.Context, userID, articleID int64, typ string) error {
@@ -219,6 +255,62 @@ func (r *Repository) StoreMessage(ctx context.Context, conversationID int64, rol
 	_, err := r.db.ExecContext(ctx, `INSERT INTO messages (conversation_id, role, content, citations) VALUES (?, ?, ?, ?)`,
 		conversationID, role, content, string(raw))
 	return err
+}
+
+func (r *Repository) RecentMessages(ctx context.Context, conversationID int64, limit int) ([]model.Message, error) {
+	if limit < 1 || limit > 50 {
+		limit = 10
+	}
+	var messages []model.Message
+	err := r.db.SelectContext(ctx, &messages, `SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT ?`, conversationID, limit)
+	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+		messages[i], messages[j] = messages[j], messages[i]
+	}
+	return messages, err
+}
+
+func (r *Repository) ListConversations(ctx context.Context, userID int64) ([]model.Conversation, error) {
+	var conversations []model.Conversation
+	err := r.db.SelectContext(ctx, &conversations, `SELECT * FROM conversations WHERE user_id = ? ORDER BY updated_at DESC`, userID)
+	return conversations, err
+}
+
+func (r *Repository) UpsertPrompt(ctx context.Context, prompt *UserPrompt) error {
+	res, err := r.db.ExecContext(ctx, `INSERT INTO user_prompts (user_id, name, content, is_default)
+VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE content = VALUES(content), is_default = VALUES(is_default), id = LAST_INSERT_ID(id)`,
+		prompt.UserID, prompt.Name, prompt.Content, prompt.IsDefault)
+	if err != nil {
+		return err
+	}
+	prompt.ID, err = res.LastInsertId()
+	return err
+}
+
+func (r *Repository) ListPrompts(ctx context.Context, userID int64) ([]UserPrompt, error) {
+	var prompts []UserPrompt
+	err := r.db.SelectContext(ctx, &prompts, `SELECT * FROM user_prompts WHERE user_id = ? ORDER BY is_default DESC, name ASC`, userID)
+	return prompts, err
+}
+
+func (r *Repository) DeletePrompt(ctx context.Context, userID, promptID int64) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM user_prompts WHERE user_id = ? AND id = ?`, userID, promptID)
+	return err
+}
+
+func (r *Repository) StoreDailyReport(ctx context.Context, report *model.DailyReport) error {
+	res, err := r.db.ExecContext(ctx, `INSERT INTO daily_reports (user_id, title, content, report_date) VALUES (?, ?, ?, ?)`,
+		report.UserID, report.Title, report.Content, report.ReportDate)
+	if err != nil {
+		return err
+	}
+	report.ID, err = res.LastInsertId()
+	return err
+}
+
+func (r *Repository) ListDailyReports(ctx context.Context, userID int64, limit, offset int) ([]model.DailyReport, error) {
+	var reports []model.DailyReport
+	err := r.db.SelectContext(ctx, &reports, `SELECT * FROM daily_reports WHERE user_id = ? ORDER BY report_date DESC, id DESC LIMIT ? OFFSET ?`, userID, limit, offset)
+	return reports, err
 }
 
 func (r *Repository) SeedFeeds(ctx context.Context, userID int64) error {
