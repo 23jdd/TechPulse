@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -17,7 +16,9 @@ import (
 	"techpulse/internal/ai"
 	"techpulse/internal/api/dto"
 	"techpulse/internal/api/middleware"
+	"techpulse/internal/auth"
 	"techpulse/internal/duplicate"
+	"techpulse/internal/email"
 	"techpulse/internal/fetcher"
 	"techpulse/internal/model"
 	"techpulse/internal/opml"
@@ -43,12 +44,14 @@ type Handler struct {
 	rag       *rag.Service
 	ai        ai.Provider
 	cache     *redisstore.Client
+	oauth     *auth.GitHubOAuth
+	mailer    email.Sender
 	hub       *ws.Hub
 	logger    *zap.Logger
 }
 
-func New(repo *mysql.Repository, fetcher *fetcher.Service, parser *parser.Service, duplicate *duplicate.Service, pipeline *pipeline.Service, search search.SearchEngine, rag *rag.Service, ai ai.Provider, cache *redisstore.Client, hub *ws.Hub, logger *zap.Logger) *Handler {
-	return &Handler{repo: repo, fetcher: fetcher, parser: parser, duplicate: duplicate, pipeline: pipeline, search: search, rag: rag, ai: ai, cache: cache, hub: hub, logger: logger}
+func New(repo *mysql.Repository, fetcher *fetcher.Service, parser *parser.Service, duplicate *duplicate.Service, pipeline *pipeline.Service, search search.SearchEngine, rag *rag.Service, ai ai.Provider, cache *redisstore.Client, oauth *auth.GitHubOAuth, mailer email.Sender, hub *ws.Hub, logger *zap.Logger) *Handler {
+	return &Handler{repo: repo, fetcher: fetcher, parser: parser, duplicate: duplicate, pipeline: pipeline, search: search, rag: rag, ai: ai, cache: cache, oauth: oauth, mailer: mailer, hub: hub, logger: logger}
 }
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
@@ -541,21 +544,63 @@ func (h *Handler) ImportOPML(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GitHubAuthURL(w http.ResponseWriter, r *http.Request) {
-	clientID := strings.TrimSpace(r.URL.Query().Get("client_id"))
-	if clientID == "" {
-		clientID = "configure-GITHUB_CLIENT_ID"
-	}
-	redirectURI := strings.TrimSpace(r.URL.Query().Get("redirect_uri"))
-	if redirectURI == "" {
-		redirectURI = "http://localhost:8080/api/v1/auth/github/callback"
+	if h.oauth == nil || !h.oauth.Enabled() {
+		response.Error(w, http.StatusServiceUnavailable, "github oauth is not configured")
+		return
 	}
 	state := randomState()
-	values := url.Values{}
-	values.Set("client_id", clientID)
-	values.Set("redirect_uri", redirectURI)
-	values.Set("scope", "read:user user:email")
-	values.Set("state", state)
-	response.JSON(w, http.StatusOK, response.Envelope{"url": "https://github.com/login/oauth/authorize?" + values.Encode(), "state": state})
+	authURL, err := h.oauth.AuthURL(state)
+	if err != nil {
+		response.Error(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, response.Envelope{"url": authURL, "state": state})
+}
+
+func (h *Handler) GitHubCallback(w http.ResponseWriter, r *http.Request) {
+	if h.oauth == nil || !h.oauth.Enabled() {
+		response.Error(w, http.StatusServiceUnavailable, "github oauth is not configured")
+		return
+	}
+	code := strings.TrimSpace(r.URL.Query().Get("code"))
+	if code == "" {
+		response.Error(w, http.StatusBadRequest, "code is required")
+		return
+	}
+	githubUser, err := h.oauth.ExchangeAndFetchUser(r.Context(), code)
+	if err != nil {
+		response.Error(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	user, err := h.repo.UpsertGitHubUser(r.Context(), *githubUser)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, response.Envelope{"user": user, "api_token": githubUser.APIToken})
+}
+
+func (h *Handler) SendTestEmail(w http.ResponseWriter, r *http.Request) {
+	var req dto.EmailRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if h.mailer == nil || !h.mailer.Enabled() {
+		response.Error(w, http.StatusServiceUnavailable, "smtp email is not configured")
+		return
+	}
+	if strings.TrimSpace(req.Subject) == "" {
+		req.Subject = "TechPulse test email"
+	}
+	if strings.TrimSpace(req.Body) == "" {
+		req.Body = "TechPulse SMTP delivery is working."
+	}
+	if err := h.mailer.Send(r.Context(), email.Message{To: req.To, Subject: req.Subject, Body: req.Body}); err != nil {
+		response.Error(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, response.Envelope{"sent": true})
 }
 
 func (h *Handler) GenerateDailyReport(w http.ResponseWriter, r *http.Request) {
@@ -567,7 +612,19 @@ func (h *Handler) GenerateDailyReport(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	response.JSON(w, http.StatusCreated, daily)
+	sent := false
+	if req.SendEmail {
+		if h.mailer == nil || !h.mailer.Enabled() {
+			response.Error(w, http.StatusServiceUnavailable, "smtp email is not configured")
+			return
+		}
+		if err := h.mailer.Send(r.Context(), email.Message{To: req.EmailTo, Subject: daily.Title, Body: daily.Content}); err != nil {
+			response.Error(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		sent = true
+	}
+	response.JSON(w, http.StatusCreated, response.Envelope{"report": daily, "email_sent": sent})
 }
 
 func (h *Handler) ListDailyReports(w http.ResponseWriter, r *http.Request) {

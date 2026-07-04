@@ -9,6 +9,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
+	"techpulse/internal/auth"
 	"techpulse/internal/model"
 )
 
@@ -53,6 +54,19 @@ INSERT INTO users (id, username, email, api_token)
 VALUES (1, 'demo', 'demo@techpulse.local', 'dev-token')
 ON DUPLICATE KEY UPDATE username = VALUES(username)`)
 	return err
+}
+
+func (r *Repository) UpsertGitHubUser(ctx context.Context, user auth.GitHubUser) (*model.User, error) {
+	_, err := r.db.ExecContext(ctx, `INSERT INTO users (github_id, username, email, avatar_url, api_token)
+VALUES (?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE username = VALUES(username), email = VALUES(email), avatar_url = VALUES(avatar_url), api_token = VALUES(api_token), updated_at = NOW()`,
+		user.GitHubID, user.Username, user.Email, user.AvatarURL, user.APIToken)
+	if err != nil {
+		return nil, err
+	}
+	var stored model.User
+	err = r.db.GetContext(ctx, &stored, `SELECT * FROM users WHERE github_id = ?`, user.GitHubID)
+	return &stored, err
 }
 
 func (r *Repository) CreateFeed(ctx context.Context, feed *model.RSSFeed) error {

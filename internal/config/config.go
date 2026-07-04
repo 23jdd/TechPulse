@@ -26,6 +26,12 @@ type Config struct {
 	RequestTimeout time.Duration
 	GitHubClientID string
 	GitHubSecret   string
+	GitHubRedirect string
+	SMTPHost       string
+	SMTPPort       int
+	SMTPUsername   string
+	SMTPPassword   string
+	SMTPFrom       string
 	DefaultUserID  int64
 }
 
@@ -49,6 +55,12 @@ func Load() Config {
 		RequestTimeout: time.Duration(envInt("REQUEST_TIMEOUT_SECONDS", 20)) * time.Second,
 		GitHubClientID: env("GITHUB_CLIENT_ID", ""),
 		GitHubSecret:   env("GITHUB_CLIENT_SECRET", ""),
+		GitHubRedirect: env("GITHUB_REDIRECT_URL", "http://localhost:8080/api/v1/auth/github/callback"),
+		SMTPHost:       env("SMTP_HOST", ""),
+		SMTPPort:       envInt("SMTP_PORT", 587),
+		SMTPUsername:   env("SMTP_USERNAME", ""),
+		SMTPPassword:   env("SMTP_PASSWORD", ""),
+		SMTPFrom:       env("SMTP_FROM", ""),
 		DefaultUserID:  int64(envInt("DEFAULT_USER_ID", 1)),
 	}
 }

@@ -30,7 +30,10 @@ User features:
 - `GET /api/v1/opml`
 - `POST /api/v1/opml` with an OPML XML request body
 - `GET /api/v1/auth/github/url`
+- `GET /api/v1/auth/github/callback?code=...&state=...`
+- `POST /api/v1/email/test` with `{"to":"you@example.com","subject":"TechPulse","body":"SMTP is working"}`
 - `POST /api/v1/daily-reports` with `{"title":"Today AI"}`
+- `POST /api/v1/daily-reports` with `{"title":"Today AI","send_email":true,"email_to":"you@example.com"}`
 - `GET /api/v1/daily-reports`
 
 ## Phase 2 Service APIs

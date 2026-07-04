@@ -51,6 +51,8 @@ func New(h *handler.Handler, logger *zap.Logger, defaultUserID int64) http.Handl
 		r.Get("/opml", h.ExportOPML)
 		r.Post("/opml", h.ImportOPML)
 		r.Get("/auth/github/url", h.GitHubAuthURL)
+		r.Get("/auth/github/callback", h.GitHubCallback)
+		r.Post("/email/test", h.SendTestEmail)
 		r.Post("/daily-reports", h.GenerateDailyReport)
 		r.Get("/daily-reports", h.ListDailyReports)
 		r.Get("/dashboard", h.Dashboard)

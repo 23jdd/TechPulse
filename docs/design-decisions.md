@@ -99,6 +99,7 @@ The gateway can switch from direct package calls to `internal/service.Client` ca
 ## What Is Intentionally Not Finished
 
 - GitHub Releases are implemented. Reddit, Arxiv, YouTube, and HackerNews are still extension stubs.
-- GitHub OAuth callback is planned, not a full auth system.
+- GitHub OAuth callback is implemented for user upsert, but session/JWT enforcement is intentionally left as a later hardening step.
+- SMTP email sending is implemented for reports and test delivery, but templates and unsubscribe/preferences are future work.
 - Observability is Prometheus-ready, not a complete tracing deployment.
 - Hybrid search reranking is simple and designed as a stepping stone toward a vector index.

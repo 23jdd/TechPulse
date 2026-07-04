@@ -17,5 +17,13 @@ type PromptRequest struct {
 }
 
 type ReportRequest struct {
-	Title string `json:"title"`
+	Title     string `json:"title"`
+	SendEmail bool   `json:"send_email"`
+	EmailTo   string `json:"email_to"`
+}
+
+type EmailRequest struct {
+	To      string `json:"to"`
+	Subject string `json:"subject"`
+	Body    string `json:"body"`
 }

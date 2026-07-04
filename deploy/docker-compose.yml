@@ -89,6 +89,14 @@ services:
       MINIO_ENDPOINT: minio:9000
       BLEVE_INDEX_PATH: /app/data/bleve
       AI_PROVIDER: mock
+      GITHUB_CLIENT_ID: ""
+      GITHUB_CLIENT_SECRET: ""
+      GITHUB_REDIRECT_URL: http://localhost:8080/api/v1/auth/github/callback
+      SMTP_HOST: ""
+      SMTP_PORT: 587
+      SMTP_USERNAME: ""
+      SMTP_PASSWORD: ""
+      SMTP_FROM: ""
     ports:
       - "8080:8080"
     volumes:

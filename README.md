@@ -17,6 +17,8 @@ Most blog projects are CRUD demos. TechPulse shows backend system design around 
 - production-style Go package layout
 - real RSS/Atom fetching
 - real GitHub Releases fetching
+- GitHub OAuth callback with user upsert
+- SMTP email delivery for test mail and daily reports
 - MySQL persistence and Redis caching
 - full-text search with field boosting and highlights
 - pluggable AI provider interface
@@ -108,9 +110,10 @@ A lightweight dashboard is available at [web/dashboard.html](web/dashboard.html)
 | Bleve Search | Working | Title/content/summary/tag search, boost, filters, highlight |
 | RAG Chat | Basic Working | Retrieves top articles and returns citations |
 | WebSocket Events | Working | Emits fetch/index/new article events |
+| GitHub OAuth | Basic Working | Auth URL, callback, GitHub user upsert |
+| Email Sending | Basic Working | SMTP test mail and daily report delivery |
 | RabbitMQ / etcd | Partial | Real client implementations, service skeletons |
 | Reddit / Arxiv / YouTube | Stub | Fetcher interface prepared |
-| Real GitHub OAuth Callback | Planned | Auth URL is implemented |
 | Kubernetes | Starter | Minimal manifests for deployment shape |
 
 ## Architecture
@@ -197,6 +200,14 @@ curl -X POST http://localhost:8080/api/v1/prompts \
 curl -X POST http://localhost:8080/api/v1/daily-reports \
   -H "Content-Type: application/json" \
   -d '{"title":"Today Go"}'
+
+curl -X POST http://localhost:8080/api/v1/daily-reports \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Today Go","send_email":true,"email_to":"you@example.com"}'
+
+curl -X POST http://localhost:8080/api/v1/email/test \
+  -H "Content-Type: application/json" \
+  -d '{"to":"you@example.com","subject":"TechPulse","body":"SMTP is working"}'
 ```
 
 ## Design Notes
@@ -213,7 +224,8 @@ Read these first when reviewing the project:
 
 - The strongest completed path is RSS/GitHub Releases -> AI -> Search -> RAG. Reddit, Arxiv, YouTube, and HackerNews are intentionally marked as stubs.
 - RabbitMQ and etcd clients are implemented, but the gateway still keeps the MVP path in-process for easy local demo.
-- OAuth is not a full login flow yet; the GitHub authorization URL endpoint is present.
+- OAuth has GitHub auth URL, callback, and user upsert. Session cookies/JWT middleware are still planned.
+- Email sending uses SMTP and is disabled until SMTP environment variables are configured.
 - Observability is Prometheus-ready but not a complete tracing stack.
 
 ## Resume Summary
@@ -223,6 +235,7 @@ TechPulse - AI-powered Developer Knowledge Hub
 
 - Built a Go-based developer intelligence platform that collects RSS/Atom technical articles, deduplicates content by URL/content hash, generates AI summaries/tags/embeddings, and stores articles in MySQL.
 - Added GitHub Releases ingestion for open-source project monitoring, mapping release notes into the same AI/search/RAG article pipeline.
+- Implemented GitHub OAuth callback and SMTP email delivery for daily technical reports.
 - Implemented full-text search with Bleve, including title/content/summary/tag search, field boosting, pagination, filters, and highlight snippets.
 - Designed a modular architecture with gateway, fetcher, parser, AI pipeline, search, RAG, scheduler, and worker modules, prepared for microservice decomposition.
 - Built a RAG chat API that retrieves relevant articles and returns answers with citations and conversation memory.

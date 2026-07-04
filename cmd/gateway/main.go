@@ -15,8 +15,10 @@ import (
 
 	apihandler "techpulse/internal/api/handler"
 	apirouter "techpulse/internal/api/router"
+	"techpulse/internal/auth"
 	"techpulse/internal/config"
 	"techpulse/internal/duplicate"
+	"techpulse/internal/email"
 	"techpulse/internal/fetcher"
 	"techpulse/internal/observability"
 	"techpulse/internal/parser"
@@ -72,6 +74,8 @@ func main() {
 
 	client := httpclient.New(cfg.RequestTimeout)
 	provider := svc.AIProvider(cfg, client)
+	oauth := auth.NewGitHubOAuth(cfg.GitHubClientID, cfg.GitHubSecret, cfg.GitHubRedirect, client)
+	mailer := email.NewSMTPSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
 	engine := search.NewHybridEngine(bleveEngine, provider)
 	hub := ws.NewHub()
 	go hub.Run()
@@ -88,7 +92,7 @@ func main() {
 	duplicateSvc := duplicate.NewService(repo)
 	pipelineSvc := pipeline.NewService(provider)
 	ragSvc := rag.NewService(rag.NewRetriever(engine), rag.NewGenerator(provider)).WithMemory(repo)
-	handler := apihandler.New(repo, fetchSvc, parserSvc, duplicateSvc, pipelineSvc, engine, ragSvc, provider, redisClient, hub, logger)
+	handler := apihandler.New(repo, fetchSvc, parserSvc, duplicateSvc, pipelineSvc, engine, ragSvc, provider, redisClient, oauth, mailer, hub, logger)
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.HTTPPort),
