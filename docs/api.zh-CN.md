@@ -24,6 +24,7 @@
 - `POST /api/v1/chat`，请求体：`{"question":"What is new in Go?","conversation_id":1}`
 - `GET /api/v1/dashboard`
 - `GET /api/v1/tasks?page_size=20&status=running` 查询任务列表
+- `GET /api/v1/trends?days=7` 查询热门标签、来源统计和每日文章数量
 - `GET /ws`
 
 ## 用户功能

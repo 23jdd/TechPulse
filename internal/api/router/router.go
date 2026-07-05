@@ -93,6 +93,7 @@ func New(h *handler.Handler, logger *zap.Logger, defaultUserID int64) http.Handl
 		r.Get("/daily-reports", h.ListDailyReports)
 		r.Get("/tasks", h.ListTasks)
 		r.Get("/tasks/{id}", h.GetTask)
+		r.Get("/trends", h.Trends)
 		r.Get("/dashboard", h.Dashboard)
 	})
 	return r

@@ -129,6 +129,7 @@ A Tailwind user app is served by the gateway at `http://localhost:8080/` and `ht
 | MySQL Storage | Working | Auto migration on gateway startup |
 | Redis Cache | Working | Best-effort cache for hot REST responses |
 | Article Management | Working | List/detail, read history, favorite, read later, archive, delete |
+| Trend Analysis | Working | Hot tags, source counts, and daily article volume over 7/30/90 days |
 | Bleve Search | Working | Title/content/summary/tag/source/date search, boost, filters, highlight |
 | RAG Chat | Basic Working | Retrieves top articles and returns citations |
 | WebSocket Events | Working | Emits fetch/index/new article events |

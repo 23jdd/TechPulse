@@ -35,6 +35,29 @@ type Dashboard struct {
 	AITokenCost      string   `json:"ai_token_cost"`
 }
 
+type TrendTag struct {
+	Name  string `db:"name" json:"name"`
+	Type  string `db:"type" json:"type"`
+	Count int64  `db:"count" json:"count"`
+}
+
+type TrendSource struct {
+	SourceType string `db:"source_type" json:"source_type"`
+	Count      int64  `db:"count" json:"count"`
+}
+
+type DailyArticleStat struct {
+	Day   string `db:"day" json:"day"`
+	Count int64  `db:"count" json:"count"`
+}
+
+type Trends struct {
+	Days    int                `json:"days"`
+	Tags    []TrendTag         `json:"tags"`
+	Sources []TrendSource      `json:"sources"`
+	Daily   []DailyArticleStat `json:"daily"`
+}
+
 type ArticleFilter struct {
 	UserID      int64
 	SourceType  string
@@ -405,6 +428,46 @@ func (r *Repository) Dashboard(ctx context.Context) (*Dashboard, error) {
 	_ = r.db.GetContext(ctx, &d.FailedTasks, `SELECT COUNT(*) FROM tasks WHERE status = 'failed'`)
 	_ = r.db.SelectContext(ctx, &d.PopularTags, `SELECT t.name FROM tags t JOIN article_tags at ON at.tag_id = t.id GROUP BY t.id ORDER BY COUNT(*) DESC LIMIT 10`)
 	return d, nil
+}
+
+func (r *Repository) Trends(ctx context.Context, days int) (*Trends, error) {
+	if days < 1 {
+		days = 7
+	}
+	if days > 90 {
+		days = 90
+	}
+	since := time.Now().AddDate(0, 0, -days)
+	out := &Trends{Days: days}
+	if err := r.db.SelectContext(ctx, &out.Tags, `
+SELECT t.name, t.type, COUNT(*) AS count
+FROM tags t
+JOIN article_tags at ON at.tag_id = t.id
+JOIN articles a ON a.id = at.article_id
+WHERE COALESCE(a.published_at, a.created_at) >= ?
+GROUP BY t.id, t.name, t.type
+ORDER BY count DESC, t.name ASC
+LIMIT 20`, since); err != nil {
+		return nil, err
+	}
+	if err := r.db.SelectContext(ctx, &out.Sources, `
+SELECT source_type, COUNT(*) AS count
+FROM articles
+WHERE COALESCE(published_at, created_at) >= ?
+GROUP BY source_type
+ORDER BY count DESC, source_type ASC
+LIMIT 10`, since); err != nil {
+		return nil, err
+	}
+	if err := r.db.SelectContext(ctx, &out.Daily, `
+SELECT DATE_FORMAT(DATE(COALESCE(published_at, created_at)), '%Y-%m-%d') AS day, COUNT(*) AS count
+FROM articles
+WHERE COALESCE(published_at, created_at) >= ?
+GROUP BY day
+ORDER BY day ASC`, since); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (r *Repository) CreateConversation(ctx context.Context, userID int64, title string) (int64, error) {

@@ -130,6 +130,57 @@ function renderTask(task) {
     </div>`;
 }
 
+async function loadTrends() {
+  const el = $("trends");
+  if (!el) return;
+  const days = $("trendDays")?.value || "7";
+  try {
+    const data = await request(`/api/v1/trends?days=${encodeURIComponent(days)}`);
+    const hasData = (data.tags || []).length || (data.sources || []).length || (data.daily || []).length;
+    el.innerHTML = hasData ? renderTrends(data) : `<p class="text-sm text-muted">${escapeHTML(t("emptyTrends"))}</p>`;
+  } catch (_) {
+    el.innerHTML = `<p class="text-sm text-muted">${escapeHTML(t("emptyTrends"))}</p>`;
+  }
+}
+
+function renderTrends(data) {
+  const maxTag = Math.max(1, ...(data.tags || []).map((item) => item.count || 0));
+  const maxSource = Math.max(1, ...(data.sources || []).map((item) => item.count || 0));
+  const maxDaily = Math.max(1, ...(data.daily || []).map((item) => item.count || 0));
+  return `
+    <div>
+      <p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted">${escapeHTML(t("trendTags"))}</p>
+      <div class="space-y-2">${(data.tags || []).slice(0, 6).map((item) => trendRow(item.name, item.count, maxTag, "bg-brand")).join("") || `<p class="text-xs text-muted">${escapeHTML(t("emptyTrends"))}</p>`}</div>
+    </div>
+    <div>
+      <p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted">${escapeHTML(t("trendSources"))}</p>
+      <div class="space-y-2">${(data.sources || []).slice(0, 4).map((item) => trendRow(item.source_type, item.count, maxSource, "bg-orange-500")).join("") || `<p class="text-xs text-muted">${escapeHTML(t("emptyTrends"))}</p>`}</div>
+    </div>
+    <div>
+      <p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted">${escapeHTML(t("trendDaily"))}</p>
+      <div class="flex h-14 items-end gap-1">${(data.daily || []).slice(-14).map((item) => dailyBar(item, maxDaily)).join("")}</div>
+    </div>`;
+}
+
+function trendRow(label, count, max, colorClass) {
+  const width = Math.max(8, Math.round(((count || 0) / max) * 100));
+  return `
+    <div>
+      <div class="flex items-center justify-between gap-2 text-xs">
+        <span class="truncate">${escapeHTML(label || "unknown")}</span>
+        <span class="text-muted">${escapeHTML(count || 0)}</span>
+      </div>
+      <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+        <div class="h-full ${colorClass}" style="width:${width}%"></div>
+      </div>
+    </div>`;
+}
+
+function dailyBar(item, max) {
+  const height = Math.max(6, Math.round(((item.count || 0) / max) * 56));
+  return `<div class="w-full rounded-t bg-slate-300" title="${escapeHTML(item.day)}: ${escapeHTML(item.count)}" style="height:${height}px"></div>`;
+}
+
 function itemsFrom(data) {
   return data.items || data.hits || [];
 }
@@ -364,6 +415,7 @@ async function pollTask(id) {
         toast(t("fetched"));
         await loadArticles();
         await loadTasks();
+        await loadTrends();
         return;
       }
       if (task.status === "failed") {
@@ -426,6 +478,7 @@ async function fetchHackerNews() {
     await request("/api/v1/hackernews/fetch", { method: "POST", body: JSON.stringify({ feed, limit }) });
     toast(t("fetched"));
     await loadArticles();
+    await loadTrends();
   } catch (err) {
     toast(err.message, true);
   }
@@ -472,6 +525,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadSession();
   checkHealth();
   loadTasks();
+  loadTrends();
   loadFeeds();
   loadArticles();
   if (window.lucide) window.lucide.createIcons();

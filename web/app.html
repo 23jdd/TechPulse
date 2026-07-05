@@ -163,6 +163,18 @@
       </section>
 
       <section class="rounded-lg border border-line bg-white p-4">
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="text-sm font-semibold">Trends</h2>
+          <select id="trendDays" onchange="loadTrends()" class="h-8 rounded-md border border-line bg-white px-2 text-xs outline-none focus:border-brand">
+            <option value="7">7d</option>
+            <option value="30">30d</option>
+            <option value="90">90d</option>
+          </select>
+        </div>
+        <div id="trends" class="mt-3 space-y-3"></div>
+      </section>
+
+      <section class="rounded-lg border border-line bg-white p-4">
         <h2 class="text-sm font-semibold">Daily report</h2>
         <div class="mt-3 grid grid-cols-[1fr_40px] gap-2">
           <input id="reportTitle" class="field" placeholder="Report title">
@@ -215,6 +227,10 @@
       fetched: "Fetch completed",
       fetchQueued: "Fetch queued",
       emptyTasks: "No tasks yet.",
+      emptyTrends: "No trend data yet.",
+      trendTags: "Tags",
+      trendSources: "Sources",
+      trendDaily: "Daily",
       saved: "Saved",
       queued: "Added to read later",
       archived: "Archived",

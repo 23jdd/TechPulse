@@ -24,6 +24,7 @@ Base URL: `http://localhost:8080`
 - `GET /api/v1/dashboard`
 - `GET /api/v1/tasks?page_size=20&status=running`
 - `GET /api/v1/tasks/{id}`
+- `GET /api/v1/trends?days=7`
 - `GET /ws`
 
 User features:

@@ -944,6 +944,21 @@ func (h *Handler) GetTask(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, task)
 }
 
+func (h *Handler) Trends(w http.ResponseWriter, r *http.Request) {
+	days := 7
+	if raw := strings.TrimSpace(r.URL.Query().Get("days")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil {
+			days = parsed
+		}
+	}
+	trends, err := h.repo.Trends(r.Context(), days)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, trends)
+}
+
 func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	var cached mysql.Dashboard
 	if h.getCache(r, "dashboard:v1", &cached) {
