@@ -95,7 +95,7 @@ gateway 可以从直接包调用切换到 `internal/service.Client`，API handle
 
 ## 有意未完成的部分
 
-- GitHub Releases 已实现。Reddit、Arxiv、YouTube、HackerNews 仍是扩展 stub。
+- GitHub Releases 和 Hacker News 已实现。Reddit、Arxiv、YouTube 仍是扩展 stub。
 - GitHub OAuth callback 已支持用户 upsert，但 session/JWT enforcement 留到后续增强。
 - SMTP 邮件发送已支持报告和测试邮件，但模板、退订、偏好设置是后续工作。
 - Observability 已具备 Prometheus-ready 结构，还不是完整 tracing 部署。

@@ -100,6 +100,36 @@ async function checkHealth() {
   }
 }
 
+async function loadTasks() {
+  const el = $("tasks");
+  if (!el) return;
+  try {
+    const data = await request("/api/v1/tasks?page_size=6");
+    const tasks = data.items || [];
+    el.innerHTML = tasks.length ? tasks.map(renderTask).join("") : `<p class="text-sm text-muted">${escapeHTML(t("emptyTasks"))}</p>`;
+  } catch (_) {
+    el.innerHTML = `<p class="text-sm text-muted">${escapeHTML(t("emptyTasks"))}</p>`;
+  }
+}
+
+function renderTask(task) {
+  const statusClass = {
+    success: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    running: "bg-sky-50 text-sky-700 border-sky-200",
+    pending: "bg-amber-50 text-amber-700 border-amber-200",
+    retrying: "bg-amber-50 text-amber-700 border-amber-200",
+    failed: "bg-rose-50 text-rose-700 border-rose-200"
+  }[task.status] || "bg-slate-50 text-muted border-line";
+  return `
+    <div class="rounded-md border border-line p-3">
+      <div class="flex items-center justify-between gap-2">
+        <span class="truncate text-sm font-medium">#${escapeHTML(task.id)} ${escapeHTML(task.type || "task")}</span>
+        <span class="rounded-full border px-2 py-0.5 text-[11px] ${statusClass}">${escapeHTML(task.status || "")}</span>
+      </div>
+      ${task.error_message ? `<p class="mt-2 max-h-10 overflow-hidden text-xs text-rose-700">${escapeHTML(task.error_message)}</p>` : ""}
+    </div>`;
+}
+
 function itemsFrom(data) {
   return data.items || data.hits || [];
 }
@@ -317,6 +347,7 @@ async function fetchFeed(id) {
   try {
     const data = await request(`/api/v1/rss/${id}/fetch-async`, { method: "POST" });
     toast(`${t("fetchQueued")} #${data.task_id}`);
+    await loadTasks();
     pollTask(data.task_id);
   } catch (err) {
     toast(err.message, true);
@@ -332,10 +363,12 @@ async function pollTask(id) {
       if (task.status === "success") {
         toast(t("fetched"));
         await loadArticles();
+        await loadTasks();
         return;
       }
       if (task.status === "failed") {
         toast(task.error_message || t("failed"), true);
+        await loadTasks();
         return;
       }
     } catch (_) {
@@ -386,6 +419,18 @@ async function fetchGitHubReleases() {
   }
 }
 
+async function fetchHackerNews() {
+  const feed = $("hnFeed").value;
+  const limit = Number($("hnLimit").value || 20);
+  try {
+    await request("/api/v1/hackernews/fetch", { method: "POST", body: JSON.stringify({ feed, limit }) });
+    toast(t("fetched"));
+    await loadArticles();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
 async function ask() {
   const question = $("question").value.trim();
   if (!question) {
@@ -426,6 +471,7 @@ document.addEventListener("DOMContentLoaded", () => {
   injectStyles();
   loadSession();
   checkHealth();
+  loadTasks();
   loadFeeds();
   loadArticles();
   if (window.lucide) window.lucide.createIcons();

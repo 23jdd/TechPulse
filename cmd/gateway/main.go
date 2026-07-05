@@ -86,7 +86,7 @@ func main() {
 	fetchSvc := fetcher.NewService(fetcher.NewRegistry(
 		fetcher.NewRSSFetcher(client),
 		fetcher.NewGitHubReleaseFetcher(client, os.Getenv("GITHUB_TOKEN")),
-		fetcher.HackerNewsFetcher{},
+		fetcher.NewHackerNewsFetcher(client),
 		fetcher.RedditFetcher{},
 		fetcher.ArxivFetcher{},
 		fetcher.YouTubeFetcher{},

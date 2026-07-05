@@ -316,6 +316,40 @@ func (h *Handler) FetchGitHubReleases(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) FetchHackerNews(w http.ResponseWriter, r *http.Request) {
+	var req dto.FetchHackerNewsRequest
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	feed := strings.TrimSpace(req.Feed)
+	if feed == "" {
+		feed = "top"
+	}
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	sourceURL := fmt.Sprintf("%s?limit=%d", feed, limit)
+	h.hub.Broadcast(ws.Event{Type: "fetch_started", Message: "Hacker News " + feed, Time: time.Now()})
+	items, err := h.fetcher.Fetch(r.Context(), fetcher.Source{Type: "hackernews", URL: sourceURL, Title: "Hacker News " + feed, Category: "Hacker News"})
+	if err != nil {
+		h.hub.Broadcast(ws.Event{Type: "task_failed", Message: err.Error(), Time: time.Now()})
+		response.Error(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	inserted, duplicates, errors := h.ingestFetchedItems(r.Context(), items)
+	h.hub.Broadcast(ws.Event{Type: "fetch_finished", Message: "Hacker News " + feed, Time: time.Now()})
+	response.JSON(w, http.StatusOK, dto.FetchSourceResponse{
+		SourceType: "hackernews",
+		SourceURL:  sourceURL,
+		Fetched:    len(items),
+		Inserted:   inserted,
+		Duplicates: duplicates,
+		Errors:     errors,
+	})
+}
+
 func (h *Handler) ingestFetchedItems(ctx context.Context, items []fetcher.FetchedItem) (int, int, []string) {
 	var inserted int
 	var duplicates int
@@ -889,6 +923,16 @@ func (h *Handler) ListDailyReports(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusOK, response.Envelope{"items": reports})
+}
+
+func (h *Handler) ListTasks(w http.ResponseWriter, r *http.Request) {
+	page := pagination.FromRequest(r)
+	tasks, err := h.repo.ListTasks(r.Context(), r.URL.Query().Get("status"), page.PageSize, page.Offset)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, response.Envelope{"items": tasks, "page": page.Page, "page_size": page.PageSize})
 }
 
 func (h *Handler) GetTask(w http.ResponseWriter, r *http.Request) {

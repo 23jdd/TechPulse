@@ -25,7 +25,7 @@ func main() {
 	fetchSvc := fetcher.NewService(fetcher.NewRegistry(
 		fetcher.NewRSSFetcher(client),
 		fetcher.NewGitHubReleaseFetcher(client, ""),
-		fetcher.HackerNewsFetcher{},
+		fetcher.NewHackerNewsFetcher(client),
 		fetcher.RedditFetcher{},
 		fetcher.ArxivFetcher{},
 		fetcher.YouTubeFetcher{},

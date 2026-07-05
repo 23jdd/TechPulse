@@ -120,6 +120,7 @@ A Tailwind user app is served by the gateway at `http://localhost:8080/` and `ht
 | Feed Management | Working | Create, update, delete, enable/disable, test, interval, OPML |
 | RSS / Atom Fetch | Working | Real HTTP fetch with timeout and user-agent |
 | GitHub Releases | Working | Fetches release title, tag, body, author, published time |
+| Hacker News | Working | Fetches top/new/best/ask/show/job stories with score and comment context |
 | Parser / Cleaner | Working | RSS item parsing and simple HTML cleaner |
 | URL / Content Hash Dedup | Working | Stable SHA-256 hashes |
 | Mock AI Summary / Tags / Embedding | Working | Runs without API keys |
@@ -243,7 +244,7 @@ Read these first when reviewing the project:
 
 ## Known Limitations
 
-- The strongest completed path is RSS/GitHub Releases -> AI -> Search -> RAG. Reddit, Arxiv, YouTube, and HackerNews are intentionally marked as stubs.
+- The strongest completed path is RSS/GitHub Releases/Hacker News -> AI -> Search -> RAG. Reddit, Arxiv, and YouTube are intentionally marked as stubs.
 - RabbitMQ and etcd clients are implemented, but the gateway still keeps the MVP path in-process for easy local demo.
 - OAuth has GitHub auth URL, callback, and user upsert. Session cookies/JWT middleware are still planned.
 - Email sending uses SMTP and is disabled until SMTP environment variables are configured.

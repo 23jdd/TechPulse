@@ -488,6 +488,16 @@ func (r *Repository) GetTask(ctx context.Context, id int64) (*model.Task, error)
 	return &task, nil
 }
 
+func (r *Repository) ListTasks(ctx context.Context, status string, limit, offset int) ([]model.Task, error) {
+	var tasks []model.Task
+	if status != "" {
+		err := r.db.SelectContext(ctx, &tasks, `SELECT * FROM tasks WHERE status = ? ORDER BY id DESC LIMIT ? OFFSET ?`, status, limit, offset)
+		return tasks, err
+	}
+	err := r.db.SelectContext(ctx, &tasks, `SELECT * FROM tasks ORDER BY id DESC LIMIT ? OFFSET ?`, limit, offset)
+	return tasks, err
+}
+
 func (r *Repository) MarkTaskRunning(ctx context.Context, id int64) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE tasks SET status = 'running', started_at = NOW(), updated_at = NOW() WHERE id = ?`, id)
 	return err

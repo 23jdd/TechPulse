@@ -84,6 +84,16 @@
 
       <section class="rounded-lg border border-line bg-white p-4">
         <div class="mb-3 flex items-center justify-between gap-2">
+          <h2 class="text-sm font-semibold">任务</h2>
+          <button onclick="loadTasks()" class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-line hover:bg-slate-50" title="重新加载任务" aria-label="重新加载任务">
+            <i data-lucide="list-checks" class="h-4 w-4"></i>
+          </button>
+        </div>
+        <div id="tasks" class="space-y-2"></div>
+      </section>
+
+      <section class="rounded-lg border border-line bg-white p-4">
+        <div class="mb-3 flex items-center justify-between gap-2">
           <h2 class="text-sm font-semibold">订阅源</h2>
           <button onclick="loadFeeds()" class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-line hover:bg-slate-50" title="重新加载订阅源" aria-label="重新加载订阅源">
             <i data-lucide="rotate-cw" class="h-4 w-4"></i>
@@ -102,6 +112,19 @@
           <input id="githubUrl" class="field" placeholder="GitHub 仓库地址">
           <button onclick="fetchGitHubReleases()" class="icon-btn bg-ink text-white hover:bg-slate-800" title="抓取 Release" aria-label="抓取 Release">
             <i data-lucide="github" class="h-4 w-4"></i>
+          </button>
+        </div>
+        <div class="mt-3 grid grid-cols-[1fr_72px_40px] gap-2">
+          <select id="hnFeed" class="field">
+            <option value="top">HN 热榜</option>
+            <option value="new">HN 最新</option>
+            <option value="best">HN 最佳</option>
+            <option value="ask">Ask HN</option>
+            <option value="show">Show HN</option>
+          </select>
+          <input id="hnLimit" type="number" min="1" max="50" value="20" class="field" title="HN 数量" aria-label="HN 数量">
+          <button onclick="fetchHackerNews()" class="icon-btn bg-orange-600 text-white hover:bg-orange-700" title="抓取 Hacker News" aria-label="抓取 Hacker News">
+            <i data-lucide="flame" class="h-4 w-4"></i>
           </button>
         </div>
         <div id="feeds" class="mt-4 space-y-2"></div>
@@ -191,6 +214,7 @@
       sourceUpdated: "订阅源已更新",
       fetched: "抓取完成",
       fetchQueued: "抓取任务已入队",
+      emptyTasks: "还没有任务。",
       saved: "已收藏",
       queued: "已加入稍后读",
       archived: "已归档",
