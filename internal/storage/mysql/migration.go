@@ -1,7 +1,10 @@
 package mysql
 
-import "context"
-import "database/sql"
+import (
+	"context"
+	"database/sql"
+	"strings"
+)
 
 const Schema = `
 CREATE TABLE IF NOT EXISTS users (
@@ -25,6 +28,12 @@ CREATE TABLE IF NOT EXISTS rss_feeds (
   status VARCHAR(32) NOT NULL DEFAULT 'active',
   fetch_interval_minutes INT NOT NULL DEFAULT 60,
   last_fetched_at TIMESTAMP NULL,
+  health_status VARCHAR(32) NOT NULL DEFAULT 'unknown',
+  health_score INT NOT NULL DEFAULT 100,
+  consecutive_failures INT NOT NULL DEFAULT 0,
+  last_error TEXT,
+  last_duration_ms BIGINT NOT NULL DEFAULT 0,
+  last_checked_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_rss_user (user_id)
@@ -161,6 +170,17 @@ CREATE TABLE IF NOT EXISTS user_prompts (
   UNIQUE KEY uniq_user_prompts_name (user_id, name)
 );
 
+CREATE TABLE IF NOT EXISTS user_preferences (
+  user_id BIGINT PRIMARY KEY,
+  interested_tags TEXT,
+  daily_report_time VARCHAR(16) NOT NULL DEFAULT '09:00',
+  daily_report_email VARCHAR(255) DEFAULT '',
+  daily_report_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Shanghai',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS daily_reports (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   user_id BIGINT NOT NULL,
@@ -168,11 +188,52 @@ CREATE TABLE IF NOT EXISTS daily_reports (
   content MEDIUMTEXT NOT NULL,
   report_date DATE NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS github_repos (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT NOT NULL,
+  owner VARCHAR(128) NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  html_url TEXT NOT NULL,
+  description TEXT,
+  stars BIGINT NOT NULL DEFAULT 0,
+  open_issues BIGINT NOT NULL DEFAULT 0,
+  default_branch VARCHAR(128) DEFAULT '',
+  latest_release VARCHAR(255) DEFAULT '',
+  latest_release_url TEXT,
+  latest_release_at TIMESTAMP NULL,
+  breaking_change BOOLEAN NOT NULL DEFAULT FALSE,
+  security_update BOOLEAN NOT NULL DEFAULT FALSE,
+  last_checked_at TIMESTAMP NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_github_repo_user_owner_name (user_id, owner, name),
+  INDEX idx_github_repo_user (user_id)
 );`
 
 func Migrate(ctx context.Context, db Execer) error {
-	_, err := db.ExecContext(ctx, Schema)
-	return err
+	if _, err := db.ExecContext(ctx, Schema); err != nil {
+		return err
+	}
+	alterStatements := []string{
+		`ALTER TABLE rss_feeds ADD COLUMN health_status VARCHAR(32) NOT NULL DEFAULT 'unknown'`,
+		`ALTER TABLE rss_feeds ADD COLUMN health_score INT NOT NULL DEFAULT 100`,
+		`ALTER TABLE rss_feeds ADD COLUMN consecutive_failures INT NOT NULL DEFAULT 0`,
+		`ALTER TABLE rss_feeds ADD COLUMN last_error TEXT`,
+		`ALTER TABLE rss_feeds ADD COLUMN last_duration_ms BIGINT NOT NULL DEFAULT 0`,
+		`ALTER TABLE rss_feeds ADD COLUMN last_checked_at TIMESTAMP NULL`,
+	}
+	for _, statement := range alterStatements {
+		if _, err := db.ExecContext(ctx, statement); err != nil && !isDuplicateColumnError(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+func isDuplicateColumnError(err error) bool {
+	return strings.Contains(strings.ToLower(err.Error()), "duplicate column")
 }
 
 type Execer interface {

@@ -92,7 +92,7 @@ function loadSession() {
 async function checkHealth() {
   try {
     const data = await request("/health");
-    $("health").textContent = data.redis ? `${t("ok")} · redis ${data.redis}` : t("ok");
+    $("health").textContent = data.redis ? `${t("ok")} / redis ${data.redis}` : t("ok");
     $("health").className = "rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-700";
   } catch (err) {
     $("health").textContent = t("error");
@@ -276,7 +276,7 @@ async function showArticle(id) {
     <div class="space-y-3">
       <div>
         <h3 class="text-base font-semibold leading-6">${escapeHTML(article.title || "Untitled")}</h3>
-        <p class="mt-1 text-xs text-muted">${escapeHTML([article.author, dateText(article.published_at || article.created_at), article.source_type].filter(Boolean).join(" · "))}</p>
+        <p class="mt-1 text-xs text-muted">${escapeHTML([article.author, dateText(article.published_at || article.created_at), article.source_type].filter(Boolean).join(" / "))}</p>
       </div>
       <div class="flex flex-wrap gap-2">
         <a href="${escapeHTML(article.url || "#")}" target="_blank" rel="noreferrer" class="chip"><i data-lucide="external-link" class="h-3.5 w-3.5"></i>${escapeHTML(t("open"))}</a>
@@ -355,12 +355,15 @@ async function loadFeeds() {
 
 function renderFeed(feed) {
   const enabled = feed.status !== "disabled";
+  const health = feed.health_status ? `${feed.health_status} ${feed.health_score || 0}` : "unknown";
+  const duration = feed.last_duration_ms ? `${feed.last_duration_ms}ms` : "";
   return `
     <div class="rounded-md border border-line p-3">
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
           <p class="truncate text-sm font-medium">${escapeHTML(feed.title || feed.url)}</p>
           <p class="mt-1 truncate text-xs text-muted">${escapeHTML(feed.category || feed.url)}</p>
+          <p class="mt-1 truncate text-xs text-muted">${escapeHTML(health)}${duration ? ` / ${escapeHTML(duration)}` : ""}</p>
         </div>
         <span class="rounded-full bg-slate-100 px-2 py-1 text-[11px] text-muted">${escapeHTML(feed.status || "active")}</span>
       </div>
@@ -471,6 +474,45 @@ async function fetchGitHubReleases() {
   }
 }
 
+async function loadGitHubRepos() {
+  const el = $("githubRepos");
+  if (!el) return;
+  try {
+    const data = await request("/api/v1/github/repos");
+    const repos = data.items || [];
+    el.innerHTML = repos.length ? repos.slice(0, 4).map(renderGitHubRepo).join("") : "";
+  } catch (_) {
+    el.innerHTML = "";
+  }
+}
+
+function renderGitHubRepo(repo) {
+  const flags = [
+    repo.breaking_change ? "breaking" : "",
+    repo.security_update ? "security" : ""
+  ].filter(Boolean).map((flag) => `<span class="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">${escapeHTML(flag)}</span>`).join("");
+  return `
+    <a href="${escapeHTML(repo.html_url || "#")}" target="_blank" rel="noreferrer" class="block rounded-md border border-line p-3 hover:bg-slate-50">
+      <div class="flex items-center justify-between gap-2">
+        <span class="truncate text-sm font-medium">${escapeHTML(`${repo.owner || ""}/${repo.name || ""}`)}</span>
+        <span class="text-xs text-muted">★ ${escapeHTML(repo.stars || 0)}</span>
+      </div>
+      <div class="mt-2 flex flex-wrap gap-1">${flags}</div>
+      <p class="mt-1 truncate text-xs text-muted">${escapeHTML(repo.latest_release || repo.description || "")}</p>
+    </a>`;
+}
+
+async function monitorGitHubRepo() {
+  const url = $("githubUrl").value.trim();
+  try {
+    await request("/api/v1/github/repos", { method: "POST", body: JSON.stringify({ url }) });
+    toast(t("monitored"));
+    await loadGitHubRepos();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
 async function fetchHackerNews() {
   const feed = $("hnFeed").value;
   const limit = Number($("hnLimit").value || 20);
@@ -494,7 +536,10 @@ async function ask() {
   $("citations").innerHTML = "";
   try {
     const data = await request("/api/v1/chat", { method: "POST", body: JSON.stringify({ question }) });
-    $("answer").textContent = data.answer || "";
+    const confidence = typeof data.confidence === "number" ? Math.round(data.confidence * 100) : 0;
+    $("answer").innerHTML = `
+      <p>${escapeHTML(data.answer || "")}</p>
+      <p class="mt-2 text-xs text-muted">${escapeHTML(data.no_answer ? t("noAnswer") : t("confidence"))}: ${escapeHTML(confidence)}%</p>`;
     $("citations").innerHTML = (data.citations || []).map((citation) => `
       <a href="${escapeHTML(citation.url || "#")}" target="_blank" rel="noreferrer" class="block rounded-md border border-line p-3 text-sm hover:bg-slate-50">
         <span class="font-medium">${escapeHTML(citation.title || `#${citation.article_id}`)}</span>
@@ -502,6 +547,45 @@ async function ask() {
       </a>`).join("");
   } catch (err) {
     $("answer").textContent = "";
+    toast(err.message, true);
+  }
+}
+
+function parsePreferenceTags(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return String(raw).split(",");
+  }
+}
+
+async function loadPreferences() {
+  if (!$("prefTags")) return;
+  try {
+    const pref = await request("/api/v1/preferences");
+    $("prefTags").value = parsePreferenceTags(pref.interested_tags).join(", ");
+    $("prefTime").value = pref.daily_report_time || "09:00";
+    $("prefEmail").value = pref.daily_report_email || "";
+    $("prefTimezone").value = pref.timezone || "Asia/Shanghai";
+    $("prefEnabled").checked = Boolean(pref.daily_report_enabled);
+  } catch (_) {}
+}
+
+async function savePreferences() {
+  const payload = {
+    interested_tags: $("prefTags").value.split(",").map((item) => item.trim()).filter(Boolean),
+    daily_report_time: $("prefTime").value.trim() || "09:00",
+    daily_report_email: $("prefEmail").value.trim(),
+    daily_report_enabled: $("prefEnabled").checked,
+    timezone: $("prefTimezone").value.trim() || "Asia/Shanghai"
+  };
+  try {
+    await request("/api/v1/preferences", { method: "PUT", body: JSON.stringify(payload) });
+    toast(t("preferencesSaved"));
+  } catch (err) {
     toast(err.message, true);
   }
 }
@@ -526,6 +610,8 @@ document.addEventListener("DOMContentLoaded", () => {
   checkHealth();
   loadTasks();
   loadTrends();
+  loadGitHubRepos();
+  loadPreferences();
   loadFeeds();
   loadArticles();
   if (window.lucide) window.lucide.createIcons();

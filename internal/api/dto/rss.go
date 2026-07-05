@@ -37,6 +37,10 @@ type FetchGitHubReleasesRequest struct {
 	URL string `json:"url"`
 }
 
+type MonitorGitHubRepoRequest struct {
+	URL string `json:"url"`
+}
+
 type FetchHackerNewsRequest struct {
 	Feed  string `json:"feed"`
 	Limit int    `json:"limit"`

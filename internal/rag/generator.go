@@ -46,7 +46,23 @@ func (g *Generator) GenerateWithHistory(ctx context.Context, question string, hi
 		b.WriteString("\n")
 	}
 	return g.provider.ChatCompletion(ctx, []ai.ChatMessage{
-		{Role: "system", Content: "Answer as a concise developer intelligence analyst. Include citation references when useful."},
+		{Role: "system", Content: "Answer as a concise developer intelligence analyst. Use only the cited articles. If the citations do not support an answer, say that the knowledge base does not contain enough evidence. Include citation references when useful."},
 		{Role: "user", Content: b.String()},
 	})
+}
+
+func (g *Generator) RewriteQuery(ctx context.Context, question string) string {
+	question = strings.TrimSpace(question)
+	if question == "" {
+		return question
+	}
+	out, err := g.provider.ChatCompletion(ctx, []ai.ChatMessage{
+		{Role: "system", Content: "Rewrite the user's question into one short search query for a technical article knowledge base. Return only the query."},
+		{Role: "user", Content: question},
+	})
+	out = strings.TrimSpace(strings.Trim(out, "\"'`"))
+	if err != nil || out == "" || len(out) > 160 {
+		return question
+	}
+	return out
 }

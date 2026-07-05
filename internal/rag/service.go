@@ -8,8 +8,11 @@ import (
 )
 
 type Answer struct {
-	Answer    string     `json:"answer"`
-	Citations []Citation `json:"citations"`
+	Answer     string     `json:"answer"`
+	Citations  []Citation `json:"citations"`
+	Query      string     `json:"query"`
+	Confidence float64    `json:"confidence"`
+	NoAnswer   bool       `json:"no_answer"`
 }
 
 type Service struct {
@@ -45,17 +48,19 @@ func (s *Service) AskWithConversation(ctx context.Context, question string, user
 		}
 		conversationID = id
 	}
-	hits, err := s.retriever.Retrieve(ctx, question, 5)
+	query := s.generator.RewriteQuery(ctx, question)
+	hits, err := s.retriever.Retrieve(ctx, query, 5)
 	if err != nil {
 		return nil, err
 	}
-	if len(hits) == 0 {
+	confidence := confidenceFromHits(hits)
+	if len(hits) == 0 || confidence < 0.05 {
 		answer := "The knowledge base does not contain enough relevant articles to answer this question yet."
 		if s.memory != nil && conversationID > 0 {
 			_ = s.memory.StoreMessage(ctx, conversationID, "user", question, nil)
 			_ = s.memory.StoreMessage(ctx, conversationID, "assistant", answer, nil)
 		}
-		return &Answer{Answer: answer, Citations: []Citation{}}, nil
+		return &Answer{Answer: answer, Citations: []Citation{}, Query: query, Confidence: confidence, NoAnswer: true}, nil
 	}
 	var history []model.Message
 	if s.memory != nil && conversationID > 0 {
@@ -73,7 +78,21 @@ func (s *Service) AskWithConversation(ctx context.Context, question string, user
 	if s.memory != nil && conversationID > 0 {
 		_ = s.memory.StoreMessage(ctx, conversationID, "assistant", answer, citations)
 	}
-	return &Answer{Answer: answer, Citations: citations}, nil
+	return &Answer{Answer: answer, Citations: citations, Query: query, Confidence: confidence, NoAnswer: false}, nil
+}
+
+func confidenceFromHits(hits []search.SearchHit) float64 {
+	if len(hits) == 0 {
+		return 0
+	}
+	top := hits[0].Score
+	if top <= 0 {
+		return 0
+	}
+	if top >= 10 {
+		return 1
+	}
+	return top / 10
 }
 
 func citationSnippet(hit search.SearchHit) string {

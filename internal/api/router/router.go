@@ -12,7 +12,7 @@ import (
 	"techpulse/internal/observability"
 )
 
-func New(h *handler.Handler, logger *zap.Logger, defaultUserID int64) http.Handler {
+func New(h *handler.Handler, logger *zap.Logger, defaultUserID int64, jwtSecret string, jwtRequired bool) http.Handler {
 	r := chi.NewRouter()
 	r.Use(chimw.Recoverer)
 	r.Use(middleware.Logging(logger))
@@ -47,7 +47,10 @@ func New(h *handler.Handler, logger *zap.Logger, defaultUserID int64) http.Handl
 	r.Get("/metrics", observability.NewMetrics().Handler().ServeHTTP)
 	r.Get("/ws", h.WebSocket)
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(middleware.MockAuth(defaultUserID))
+		r.Use(middleware.Auth(defaultUserID, jwtSecret, jwtRequired))
+		r.Get("/me", h.Me)
+		r.Get("/preferences", h.GetPreference)
+		r.Put("/preferences", h.UpdatePreference)
 		r.Post("/rss", h.CreateRSS)
 		r.Get("/rss", h.ListRSS)
 		r.Get("/rss/{id}", h.GetRSS)
@@ -59,6 +62,8 @@ func New(h *handler.Handler, logger *zap.Logger, defaultUserID int64) http.Handl
 		r.Post("/rss/{id}/fetch", h.FetchRSS)
 		r.Post("/rss/{id}/fetch-async", h.FetchRSSAsync)
 		r.Post("/github/releases/fetch", h.FetchGitHubReleases)
+		r.Get("/github/repos", h.ListGitHubRepos)
+		r.Post("/github/repos", h.MonitorGitHubRepo)
 		r.Post("/hackernews/fetch", h.FetchHackerNews)
 		r.Get("/articles", h.ListArticles)
 		r.Get("/articles/{id}", h.GetArticle)

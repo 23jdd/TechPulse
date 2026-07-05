@@ -6,7 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"os"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -50,11 +54,12 @@ type Handler struct {
 	mailer    email.Sender
 	hub       *ws.Hub
 	broker    queue.Broker
+	jwtSecret string
 	logger    *zap.Logger
 }
 
-func New(repo *mysql.Repository, fetcher *fetcher.Service, parser *parser.Service, duplicate *duplicate.Service, pipeline *pipeline.Service, search search.SearchEngine, rag *rag.Service, ai ai.Provider, cache *redisstore.Client, oauth *auth.GitHubOAuth, mailer email.Sender, hub *ws.Hub, broker queue.Broker, logger *zap.Logger) *Handler {
-	return &Handler{repo: repo, fetcher: fetcher, parser: parser, duplicate: duplicate, pipeline: pipeline, search: search, rag: rag, ai: ai, cache: cache, oauth: oauth, mailer: mailer, hub: hub, broker: broker, logger: logger}
+func New(repo *mysql.Repository, fetcher *fetcher.Service, parser *parser.Service, duplicate *duplicate.Service, pipeline *pipeline.Service, search search.SearchEngine, rag *rag.Service, ai ai.Provider, cache *redisstore.Client, oauth *auth.GitHubOAuth, mailer email.Sender, hub *ws.Hub, broker queue.Broker, jwtSecret string, logger *zap.Logger) *Handler {
+	return &Handler{repo: repo, fetcher: fetcher, parser: parser, duplicate: duplicate, pipeline: pipeline, search: search, rag: rag, ai: ai, cache: cache, oauth: oauth, mailer: mailer, hub: hub, broker: broker, jwtSecret: jwtSecret, logger: logger}
 }
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
@@ -66,6 +71,47 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	response.JSON(w, http.StatusOK, response.Envelope{"status": "ok", "service": "gateway", "redis": redisStatus})
+}
+
+func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserID(r)
+	user, err := h.repo.GetUser(r.Context(), userID)
+	if err != nil {
+		response.JSON(w, http.StatusOK, response.Envelope{"id": userID, "username": "demo"})
+		return
+	}
+	response.JSON(w, http.StatusOK, user)
+}
+
+func (h *Handler) GetPreference(w http.ResponseWriter, r *http.Request) {
+	pref, err := h.repo.GetPreference(r.Context(), middleware.UserID(r))
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, pref)
+}
+
+func (h *Handler) UpdatePreference(w http.ResponseWriter, r *http.Request) {
+	var req dto.PreferenceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	rawTags, _ := json.Marshal(uniqueStrings(req.InterestedTags))
+	pref := &model.UserPreference{
+		UserID:             middleware.UserID(r),
+		InterestedTags:     string(rawTags),
+		DailyReportTime:    defaultString(req.DailyReportTime, "09:00"),
+		DailyReportEmail:   req.DailyReportEmail,
+		DailyReportEnabled: req.DailyReportEnabled,
+		Timezone:           defaultString(req.Timezone, "Asia/Shanghai"),
+	}
+	if err := h.repo.UpsertPreference(r.Context(), pref); err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, pref)
 }
 
 func (h *Handler) CreateRSS(w http.ResponseWriter, r *http.Request) {
@@ -233,6 +279,7 @@ func (h *Handler) TestRSS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) fetchFeedContext(ctx context.Context, feedID int64) (*dto.FetchRSSResponse, int) {
+	start := time.Now()
 	feed, err := h.repo.GetFeed(ctx, feedID)
 	if err != nil {
 		return &dto.FetchRSSResponse{FeedID: feedID, Errors: []string{"feed not found"}}, http.StatusNotFound
@@ -243,12 +290,14 @@ func (h *Handler) fetchFeedContext(ctx context.Context, feedID int64) (*dto.Fetc
 	h.hub.Broadcast(ws.Event{Type: "fetch_started", Message: feed.URL, Time: time.Now()})
 	items, err := h.fetcher.Fetch(ctx, fetcher.Source{ID: feed.ID, Type: "rss", URL: feed.URL, Title: feed.Title, Category: feed.Category})
 	if err != nil {
+		_ = h.repo.MarkFeedHealth(ctx, feed.ID, false, time.Since(start), err.Error())
 		h.hub.Broadcast(ws.Event{Type: "task_failed", Message: err.Error(), Time: time.Now()})
 		return &dto.FetchRSSResponse{FeedID: feed.ID, Errors: []string{err.Error()}}, http.StatusBadGateway
 	}
 	inserted, duplicates, errors := h.ingestFetchedItems(ctx, items)
 	out := &dto.FetchRSSResponse{FeedID: feed.ID, Fetched: len(items), Inserted: inserted, Duplicates: duplicates, Errors: errors}
 	_ = h.repo.MarkFeedFetched(ctx, feed.ID)
+	_ = h.repo.MarkFeedHealth(ctx, feed.ID, len(errors) == 0, time.Since(start), strings.Join(errors, "; "))
 	h.hub.Broadcast(ws.Event{Type: "fetch_finished", Message: feed.URL, Time: time.Now()})
 	return out, http.StatusOK
 }
@@ -314,6 +363,134 @@ func (h *Handler) FetchGitHubReleases(w http.ResponseWriter, r *http.Request) {
 		Duplicates: duplicates,
 		Errors:     errors,
 	})
+}
+
+func (h *Handler) ListGitHubRepos(w http.ResponseWriter, r *http.Request) {
+	repos, err := h.repo.ListGitHubRepos(r.Context(), middleware.UserID(r))
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, response.Envelope{"items": repos})
+}
+
+func (h *Handler) MonitorGitHubRepo(w http.ResponseWriter, r *http.Request) {
+	var req dto.MonitorGitHubRepoRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	owner, name, err := parseGitHubRepo(req.URL)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	repo, err := h.fetchGitHubRepoSnapshot(r.Context(), middleware.UserID(r), owner, name)
+	if err != nil {
+		response.Error(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if err := h.repo.UpsertGitHubRepo(r.Context(), repo); err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, repo)
+}
+
+func (h *Handler) fetchGitHubRepoSnapshot(ctx context.Context, userID int64, owner, name string) (*model.GitHubRepo, error) {
+	var repoResp struct {
+		FullName      string `json:"full_name"`
+		HTMLURL       string `json:"html_url"`
+		Description   string `json:"description"`
+		Stars         int64  `json:"stargazers_count"`
+		OpenIssues    int64  `json:"open_issues_count"`
+		DefaultBranch string `json:"default_branch"`
+	}
+	if err := fetchGitHubJSON(ctx, "https://api.github.com/repos/"+path.Join(owner, name), &repoResp); err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	out := &model.GitHubRepo{
+		UserID:        userID,
+		Owner:         owner,
+		Name:          name,
+		HTMLURL:       repoResp.HTMLURL,
+		Description:   repoResp.Description,
+		Stars:         repoResp.Stars,
+		OpenIssues:    repoResp.OpenIssues,
+		DefaultBranch: repoResp.DefaultBranch,
+		LastCheckedAt: &now,
+	}
+	var releaseResp struct {
+		Name        string     `json:"name"`
+		TagName     string     `json:"tag_name"`
+		HTMLURL     string     `json:"html_url"`
+		Body        string     `json:"body"`
+		PublishedAt *time.Time `json:"published_at"`
+	}
+	if err := fetchGitHubJSON(ctx, "https://api.github.com/repos/"+path.Join(owner, name, "releases/latest"), &releaseResp); err == nil {
+		title := strings.TrimSpace(releaseResp.Name)
+		if title == "" {
+			title = releaseResp.TagName
+		}
+		out.LatestRelease = title
+		out.LatestReleaseURL = releaseResp.HTMLURL
+		out.LatestReleaseAt = releaseResp.PublishedAt
+		text := strings.ToLower(title + "\n" + releaseResp.Body)
+		out.BreakingChange = strings.Contains(text, "breaking") || strings.Contains(text, "migration") || strings.Contains(text, "incompatible")
+		out.SecurityUpdate = strings.Contains(text, "security") || strings.Contains(text, "cve-") || strings.Contains(text, "vulnerab")
+	}
+	if out.HTMLURL == "" {
+		out.HTMLURL = "https://github.com/" + path.Join(owner, name)
+	}
+	return out, nil
+}
+
+func fetchGitHubJSON(ctx context.Context, endpoint string, dst any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "TechPulse")
+	if token := strings.TrimSpace(os.Getenv("GITHUB_TOKEN")); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return fmt.Errorf("github api %s returned %d: %s", endpoint, resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return json.NewDecoder(resp.Body).Decode(dst)
+}
+
+func parseGitHubRepo(raw string) (string, string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", "", fmt.Errorf("url is required")
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "", "", err
+	}
+	if parsed.Host == "api.github.com" {
+		parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+		if len(parts) >= 3 && parts[0] == "repos" {
+			return parts[1], strings.TrimSuffix(parts[2], ".git"), nil
+		}
+	}
+	if parsed.Host != "github.com" {
+		return "", "", fmt.Errorf("github repository URL must look like https://github.com/{owner}/{repo}")
+	}
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	if len(parts) < 2 {
+		return "", "", fmt.Errorf("github repository URL must look like https://github.com/{owner}/{repo}")
+	}
+	return parts[0], strings.TrimSuffix(parts[1], ".git"), nil
 }
 
 func (h *Handler) FetchHackerNews(w http.ResponseWriter, r *http.Request) {
@@ -831,10 +1008,20 @@ func (h *Handler) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.HasPrefix(r.URL.Query().Get("state"), "ui:") {
-		h.renderOAuthSuccess(w, user, githubUser.APIToken, strings.HasPrefix(r.URL.Query().Get("state"), "ui:zh:"))
+		sessionToken, err := auth.SignJWT(h.jwtSecret, user.ID, user.Username, 24*time.Hour)
+		if err != nil {
+			response.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		h.renderOAuthSuccess(w, user, sessionToken, strings.HasPrefix(r.URL.Query().Get("state"), "ui:zh:"))
 		return
 	}
-	response.JSON(w, http.StatusOK, response.Envelope{"user": user, "api_token": githubUser.APIToken})
+	sessionToken, err := auth.SignJWT(h.jwtSecret, user.ID, user.Username, 24*time.Hour)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, response.Envelope{"user": user, "api_token": githubUser.APIToken, "session_token": sessionToken})
 }
 
 func (h *Handler) renderOAuthSuccess(w http.ResponseWriter, user *model.User, token string, zh bool) {
@@ -1024,6 +1211,13 @@ func uniqueStrings(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func defaultString(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
 }
 
 func randomState() string {

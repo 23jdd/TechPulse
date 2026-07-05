@@ -108,6 +108,14 @@ ON DUPLICATE KEY UPDATE username = VALUES(username), email = VALUES(email), avat
 	return &stored, err
 }
 
+func (r *Repository) GetUser(ctx context.Context, id int64) (*model.User, error) {
+	var user model.User
+	if err := r.db.GetContext(ctx, &user, `SELECT * FROM users WHERE id = ?`, id); err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
 func (r *Repository) CreateFeed(ctx context.Context, feed *model.RSSFeed) error {
 	interval := feed.FetchInterval
 	if interval <= 0 {
@@ -160,6 +168,30 @@ func (r *Repository) DeleteFeed(ctx context.Context, id int64) error {
 
 func (r *Repository) MarkFeedFetched(ctx context.Context, id int64) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE rss_feeds SET last_fetched_at = NOW(), updated_at = NOW() WHERE id = ?`, id)
+	return err
+}
+
+func (r *Repository) MarkFeedHealth(ctx context.Context, id int64, ok bool, duration time.Duration, message string) error {
+	status := "healthy"
+	score := 100
+	if duration > 5*time.Second {
+		status = "slow"
+		score = 70
+	}
+	if !ok {
+		status = "failed"
+		score = 20
+		_, err := r.db.ExecContext(ctx, `UPDATE rss_feeds
+SET health_status = ?, health_score = ?, consecutive_failures = consecutive_failures + 1,
+    last_error = ?, last_duration_ms = ?, last_checked_at = NOW(), updated_at = NOW(),
+    status = CASE WHEN consecutive_failures + 1 >= 3 THEN 'disabled' ELSE status END
+WHERE id = ?`, status, score, message, duration.Milliseconds(), id)
+		return err
+	}
+	_, err := r.db.ExecContext(ctx, `UPDATE rss_feeds
+SET health_status = ?, health_score = ?, consecutive_failures = 0, last_error = '',
+    last_duration_ms = ?, last_checked_at = NOW(), updated_at = NOW()
+WHERE id = ?`, status, score, duration.Milliseconds(), id)
 	return err
 }
 
@@ -525,6 +557,33 @@ func (r *Repository) DeletePrompt(ctx context.Context, userID, promptID int64) e
 	return err
 }
 
+func (r *Repository) GetPreference(ctx context.Context, userID int64) (*model.UserPreference, error) {
+	var pref model.UserPreference
+	err := r.db.GetContext(ctx, &pref, `SELECT * FROM user_preferences WHERE user_id = ?`, userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		pref = model.UserPreference{UserID: userID, DailyReportTime: "09:00", Timezone: "Asia/Shanghai"}
+		return &pref, nil
+	}
+	return &pref, err
+}
+
+func (r *Repository) UpsertPreference(ctx context.Context, pref *model.UserPreference) error {
+	if pref.DailyReportTime == "" {
+		pref.DailyReportTime = "09:00"
+	}
+	if pref.Timezone == "" {
+		pref.Timezone = "Asia/Shanghai"
+	}
+	_, err := r.db.ExecContext(ctx, `INSERT INTO user_preferences
+(user_id, interested_tags, daily_report_time, daily_report_email, daily_report_enabled, timezone)
+VALUES (?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE interested_tags = VALUES(interested_tags),
+daily_report_time = VALUES(daily_report_time), daily_report_email = VALUES(daily_report_email),
+daily_report_enabled = VALUES(daily_report_enabled), timezone = VALUES(timezone), updated_at = NOW()`,
+		pref.UserID, pref.InterestedTags, pref.DailyReportTime, pref.DailyReportEmail, pref.DailyReportEnabled, pref.Timezone)
+	return err
+}
+
 func (r *Repository) StoreDailyReport(ctx context.Context, report *model.DailyReport) error {
 	res, err := r.db.ExecContext(ctx, `INSERT INTO daily_reports (user_id, title, content, report_date) VALUES (?, ?, ?, ?)`,
 		report.UserID, report.Title, report.Content, report.ReportDate)
@@ -533,6 +592,31 @@ func (r *Repository) StoreDailyReport(ctx context.Context, report *model.DailyRe
 	}
 	report.ID, err = res.LastInsertId()
 	return err
+}
+
+func (r *Repository) HasDailyReport(ctx context.Context, userID int64, date time.Time) (bool, error) {
+	var id int64
+	err := r.db.GetContext(ctx, &id, `SELECT id FROM daily_reports WHERE user_id = ? AND report_date = ? LIMIT 1`, userID, date.Format(time.DateOnly))
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (r *Repository) DueDailyReportPreferences(ctx context.Context, hhmm string) ([]model.UserPreference, error) {
+	var prefs []model.UserPreference
+	err := r.db.SelectContext(ctx, &prefs, `SELECT * FROM user_preferences
+WHERE daily_report_enabled = TRUE AND daily_report_time = ?
+ORDER BY user_id ASC`, hhmm)
+	return prefs, err
+}
+
+func (r *Repository) EnabledDailyReportPreferences(ctx context.Context) ([]model.UserPreference, error) {
+	var prefs []model.UserPreference
+	err := r.db.SelectContext(ctx, &prefs, `SELECT * FROM user_preferences
+WHERE daily_report_enabled = TRUE
+ORDER BY user_id ASC`)
+	return prefs, err
 }
 
 func (r *Repository) CreateTask(ctx context.Context, typ, payload string) (int64, error) {
@@ -585,6 +669,28 @@ func (r *Repository) ListDailyReports(ctx context.Context, userID int64, limit, 
 	var reports []model.DailyReport
 	err := r.db.SelectContext(ctx, &reports, `SELECT * FROM daily_reports WHERE user_id = ? ORDER BY report_date DESC, id DESC LIMIT ? OFFSET ?`, userID, limit, offset)
 	return reports, err
+}
+
+func (r *Repository) UpsertGitHubRepo(ctx context.Context, repo *model.GitHubRepo) error {
+	_, err := r.db.ExecContext(ctx, `INSERT INTO github_repos
+(user_id, owner, name, html_url, description, stars, open_issues, default_branch, latest_release,
+ latest_release_url, latest_release_at, breaking_change, security_update, last_checked_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+ON DUPLICATE KEY UPDATE html_url = VALUES(html_url), description = VALUES(description),
+stars = VALUES(stars), open_issues = VALUES(open_issues), default_branch = VALUES(default_branch),
+latest_release = VALUES(latest_release), latest_release_url = VALUES(latest_release_url),
+latest_release_at = VALUES(latest_release_at), breaking_change = VALUES(breaking_change),
+security_update = VALUES(security_update), last_checked_at = NOW(), updated_at = NOW()`,
+		repo.UserID, repo.Owner, repo.Name, repo.HTMLURL, repo.Description, repo.Stars, repo.OpenIssues,
+		repo.DefaultBranch, repo.LatestRelease, repo.LatestReleaseURL, repo.LatestReleaseAt,
+		repo.BreakingChange, repo.SecurityUpdate)
+	return err
+}
+
+func (r *Repository) ListGitHubRepos(ctx context.Context, userID int64) ([]model.GitHubRepo, error) {
+	var repos []model.GitHubRepo
+	err := r.db.SelectContext(ctx, &repos, `SELECT * FROM github_repos WHERE user_id = ? ORDER BY updated_at DESC, id DESC`, userID)
+	return repos, err
 }
 
 func (r *Repository) SeedFeeds(ctx context.Context, userID int64) error {

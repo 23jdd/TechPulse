@@ -25,6 +25,7 @@ import (
 	"techpulse/internal/pipeline"
 	"techpulse/internal/queue"
 	"techpulse/internal/rag"
+	"techpulse/internal/report"
 	"techpulse/internal/search"
 	svc "techpulse/internal/service"
 	"techpulse/internal/storage/mysql"
@@ -80,6 +81,7 @@ func main() {
 	engine := search.NewHybridEngine(bleveEngine, provider)
 	hub := ws.NewHub()
 	go hub.Run()
+	go runDailyReportScheduler(ctx, repo, mailer, logger)
 	broker := queue.NewRabbitMQ(cfg.RabbitMQURL)
 	defer broker.Close()
 
@@ -95,11 +97,11 @@ func main() {
 	duplicateSvc := duplicate.NewService(repo)
 	pipelineSvc := pipeline.NewService(provider)
 	ragSvc := rag.NewService(rag.NewRetriever(engine), rag.NewGenerator(provider)).WithMemory(repo)
-	handler := apihandler.New(repo, fetchSvc, parserSvc, duplicateSvc, pipelineSvc, engine, ragSvc, provider, redisClient, oauth, mailer, hub, broker, logger)
+	handler := apihandler.New(repo, fetchSvc, parserSvc, duplicateSvc, pipelineSvc, engine, ragSvc, provider, redisClient, oauth, mailer, hub, broker, cfg.JWTSecret, logger)
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.HTTPPort),
-		Handler:           apirouter.New(handler, logger, cfg.DefaultUserID),
+		Handler:           apirouter.New(handler, logger, cfg.DefaultUserID, cfg.JWTSecret, cfg.JWTRequired),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -115,6 +117,53 @@ func main() {
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error("shutdown", zap.Error(err))
+	}
+}
+
+func runDailyReportScheduler(ctx context.Context, repo *mysql.Repository, mailer email.Sender, logger *zap.Logger) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	run := func() {
+		prefs, err := repo.EnabledDailyReportPreferences(ctx)
+		if err != nil {
+			logger.Warn("load report preferences failed", zap.Error(err))
+			return
+		}
+		for _, pref := range prefs {
+			location := time.Local
+			if pref.Timezone != "" {
+				if loaded, err := time.LoadLocation(pref.Timezone); err == nil {
+					location = loaded
+				}
+			}
+			now := time.Now().In(location)
+			if now.Format("15:04") != pref.DailyReportTime {
+				continue
+			}
+			exists, err := repo.HasDailyReport(ctx, pref.UserID, now)
+			if err != nil || exists {
+				continue
+			}
+			daily, err := report.NewService(repo).Generate(ctx, pref.UserID, "TechPulse Daily Report")
+			if err != nil {
+				logger.Warn("scheduled report generation failed", zap.Int64("user_id", pref.UserID), zap.Error(err))
+				continue
+			}
+			if mailer != nil && mailer.Enabled() && pref.DailyReportEmail != "" {
+				if err := mailer.Send(ctx, email.Message{To: pref.DailyReportEmail, Subject: daily.Title, Body: daily.Content}); err != nil {
+					logger.Warn("scheduled report email failed", zap.Int64("user_id", pref.UserID), zap.Error(err))
+				}
+			}
+		}
+	}
+	run()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			run()
+		}
 	}
 }
 

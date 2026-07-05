@@ -27,3 +27,11 @@ type EmailRequest struct {
 	Subject string `json:"subject"`
 	Body    string `json:"body"`
 }
+
+type PreferenceRequest struct {
+	InterestedTags     []string `json:"interested_tags"`
+	DailyReportTime    string   `json:"daily_report_time"`
+	DailyReportEmail   string   `json:"daily_report_email"`
+	DailyReportEnabled bool     `json:"daily_report_enabled"`
+	Timezone           string   `json:"timezone"`
+}

@@ -19,6 +19,8 @@ type Config struct {
 	MinIOSecretKey string
 	MinIOBucket    string
 	GatewayURL     string
+	JWTSecret      string
+	JWTRequired    bool
 	AIProvider     string
 	AIBaseURL      string
 	AIAPIKey       string
@@ -49,6 +51,8 @@ func Load() Config {
 		MinIOSecretKey: env("MINIO_SECRET_KEY", "minioadmin"),
 		MinIOBucket:    env("MINIO_BUCKET", "techpulse"),
 		GatewayURL:     env("GATEWAY_INTERNAL_URL", "http://localhost:8080"),
+		JWTSecret:      env("JWT_SECRET", "techpulse-dev-secret"),
+		JWTRequired:    envBool("JWT_AUTH_REQUIRED", false),
 		AIProvider:     env("AI_PROVIDER", "mock"),
 		AIBaseURL:      env("AI_BASE_URL", "https://api.openai.com/v1"),
 		AIAPIKey:       env("AI_API_KEY", ""),
@@ -72,6 +76,14 @@ func env(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func envBool(key string, fallback bool) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	if value == "" {
+		return fallback
+	}
+	return value == "1" || value == "true" || value == "yes" || value == "on"
 }
 
 func envInt(key string, fallback int) int {
