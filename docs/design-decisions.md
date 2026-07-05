@@ -66,7 +66,7 @@ MockAIProvider makes the demo deterministic and cheap:
 
 Real providers are still supported through the OpenAI-compatible interface and Ollama-compatible `/v1` endpoints.
 
-## Why RabbitMQ And etcd Are Partial In MVP
+## Why RabbitMQ And etcd Are Incremental Infrastructure
 
 The system is designed for distributed services, but the strongest value comes from the main ingestion/search/RAG chain. RabbitMQ and etcd are included as real clients and service skeletons, but the gateway path remains in-process until the workflow is stable.
 
@@ -99,7 +99,7 @@ The gateway can switch from direct package calls to `internal/service.Client` ca
 ## What Is Intentionally Not Finished
 
 - GitHub Releases and Hacker News are implemented. Reddit, Arxiv, and YouTube are still extension stubs.
-- GitHub OAuth callback is implemented for user upsert, but session/JWT enforcement is intentionally left as a later hardening step.
-- SMTP email sending is implemented for reports and test delivery, but templates and unsubscribe/preferences are future work.
+- GitHub OAuth callback now issues a JWT session token; strict JWT enforcement is opt-in through `JWT_AUTH_REQUIRED=true` to keep local demos easy.
+- SMTP email sending is implemented for reports, test delivery, and scheduled daily reports. Templates and unsubscribe links remain future polish.
 - Observability is Prometheus-ready, not a complete tracing deployment.
 - Hybrid search reranking is simple and designed as a stepping stone toward a vector index.

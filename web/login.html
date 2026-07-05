@@ -7,19 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            ink: "#17202a",
-            muted: "#667085",
-            line: "#d9dee7",
-            brand: "#0f766e",
-            brandDark: "#115e59"
-          }
-        }
-      }
-    };
+    tailwind.config = { theme: { extend: { colors: { ink: "#17202a", muted: "#667085", line: "#d9dee7", brand: "#0f766e", brandDark: "#115e59" } } } };
   </script>
 </head>
 <body class="min-h-screen bg-[#f6f7f9] text-ink antialiased">
@@ -27,13 +15,8 @@
     <section class="hidden border-r border-line bg-white p-10 lg:flex lg:flex-col lg:justify-between">
       <div>
         <div class="flex items-center gap-3">
-          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-brand text-white">
-            <i data-lucide="activity" class="h-5 w-5"></i>
-          </div>
-          <div>
-            <h1 class="text-lg font-semibold">TechPulse</h1>
-            <p class="text-sm text-muted">AI developer intelligence platform</p>
-          </div>
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-brand text-white"><i data-lucide="activity" class="h-5 w-5"></i></div>
+          <div><h1 class="text-lg font-semibold">TechPulse</h1><p class="text-sm text-muted">AI developer intelligence platform</p></div>
         </div>
         <div class="mt-16 max-w-2xl">
           <p class="text-sm font-medium uppercase tracking-wide text-muted">Knowledge workflow</p>
@@ -42,54 +25,32 @@
         </div>
       </div>
       <div class="grid max-w-2xl grid-cols-3 gap-3 text-sm">
-        <div class="rounded-lg border border-line p-4">
-          <i data-lucide="rss" class="h-5 w-5 text-brand"></i>
-          <p class="mt-3 font-medium">RSS / Releases</p>
-        </div>
-        <div class="rounded-lg border border-line p-4">
-          <i data-lucide="search" class="h-5 w-5 text-brand"></i>
-          <p class="mt-3 font-medium">Bleve Search</p>
-        </div>
-        <div class="rounded-lg border border-line p-4">
-          <i data-lucide="sparkles" class="h-5 w-5 text-brand"></i>
-          <p class="mt-3 font-medium">RAG Chat</p>
-        </div>
+        <div class="rounded-lg border border-line p-4"><i data-lucide="rss" class="h-5 w-5 text-brand"></i><p class="mt-3 font-medium">RSS / Releases</p></div>
+        <div class="rounded-lg border border-line p-4"><i data-lucide="search" class="h-5 w-5 text-brand"></i><p class="mt-3 font-medium">Bleve Search</p></div>
+        <div class="rounded-lg border border-line p-4"><i data-lucide="sparkles" class="h-5 w-5 text-brand"></i><p class="mt-3 font-medium">RAG Chat</p></div>
       </div>
     </section>
 
     <section class="flex items-center justify-center p-5">
       <div class="w-full max-w-md rounded-lg border border-line bg-white p-6 shadow-sm">
         <div class="mb-6 flex items-start justify-between gap-3">
-          <div>
-            <h2 class="text-xl font-semibold">Sign in</h2>
-            <p class="mt-1 text-sm text-muted">Access your feeds, saved articles, and daily reports.</p>
-          </div>
+          <div><h2 class="text-xl font-semibold">Sign in</h2><p class="mt-1 text-sm text-muted">Access your feeds, saved articles, and daily reports.</p></div>
           <a href="/login/zh" class="rounded-md border border-line px-3 py-1.5 text-sm text-muted hover:bg-slate-50">中文</a>
         </div>
 
         <div class="space-y-3">
-          <button onclick="githubLogin()" class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-ink px-3 py-2.5 text-sm font-medium text-white hover:bg-slate-800">
-            <i data-lucide="github" class="h-4 w-4"></i> Continue with GitHub
-          </button>
-          <button onclick="demoLogin()" class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-line bg-white px-3 py-2.5 text-sm font-medium text-ink hover:bg-slate-50">
-            <i data-lucide="monitor-play" class="h-4 w-4"></i> Demo Login
-          </button>
+          <button onclick="githubLogin()" class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-ink px-3 py-2.5 text-sm font-medium text-white hover:bg-slate-800"><i data-lucide="github" class="h-4 w-4"></i> Continue with GitHub</button>
+          <button onclick="demoLogin()" class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-line bg-white px-3 py-2.5 text-sm font-medium text-ink hover:bg-slate-50"><i data-lucide="monitor-play" class="h-4 w-4"></i> Demo Login</button>
         </div>
 
-        <div class="my-6 flex items-center gap-3">
-          <div class="h-px flex-1 bg-line"></div>
-          <span class="text-xs text-muted">or</span>
-          <div class="h-px flex-1 bg-line"></div>
-        </div>
+        <div class="my-6 flex items-center gap-3"><div class="h-px flex-1 bg-line"></div><span class="text-xs text-muted">or</span><div class="h-px flex-1 bg-line"></div></div>
 
         <label class="block text-xs font-medium text-muted" for="token">API token</label>
         <input id="token" class="mt-1 w-full rounded-md border border-line px-3 py-2 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/10" placeholder="Paste token for local testing">
-        <button onclick="tokenLogin()" class="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md bg-brand px-3 py-2.5 text-sm font-medium text-white hover:bg-brandDark">
-          <i data-lucide="key-round" class="h-4 w-4"></i> Save Token
-        </button>
+        <button onclick="tokenLogin()" class="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md bg-brand px-3 py-2.5 text-sm font-medium text-white hover:bg-brandDark"><i data-lucide="key-round" class="h-4 w-4"></i> Save Token</button>
 
         <p id="message" class="mt-4 min-h-5 text-sm text-muted"></p>
-        <p class="mt-5 text-xs leading-5 text-muted">Local demo APIs still use the configured default user unless full JWT/session enforcement is enabled. This login page exists to show the intended product flow.</p>
+        <p class="mt-5 text-xs leading-5 text-muted">Local demo APIs use the configured default user unless JWT_AUTH_REQUIRED=true. GitHub OAuth stores a JWT session token for the app.</p>
       </div>
     </section>
   </main>

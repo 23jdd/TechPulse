@@ -18,15 +18,17 @@ Most blog projects are CRUD demos. TechPulse shows backend system design around 
 
 - production-style Go package layout
 - real RSS/Atom fetching
-- feed CRUD with enable/disable, fetch interval, health test, OPML import/export
+- feed CRUD with enable/disable, fetch interval, health test, health scoring, OPML import/export
 - article read/favorite/read-later/archive/delete workflows
 - real GitHub Releases fetching
-- GitHub OAuth callback with user upsert
-- SMTP email delivery for test mail and daily reports
+- GitHub repo monitoring for stars, open issues, latest release, breaking-change hints, and security hints
+- GitHub OAuth callback with user upsert and JWT session token
+- SMTP email delivery for test mail, manual reports, and scheduled daily reports
+- user preferences for interested tags, timezone, and daily report delivery
 - MySQL persistence and Redis caching
 - full-text search with field boosting and highlights
 - pluggable AI provider interface
-- simple RAG answer generation with citations
+- RAG answer generation with query rewrite, citations, confidence, and no-answer guard
 - Docker Compose infrastructure for MySQL, Redis, RabbitMQ, etcd, MinIO, and Go services
 
 ## 3-Minute Demo
@@ -74,6 +76,10 @@ curl -X POST http://localhost:8080/api/v1/chat \
 curl -X POST http://localhost:8080/api/v1/github/releases/fetch \
   -H "Content-Type: application/json" \
   -d '{"url":"https://github.com/golang/go"}'
+
+curl -X POST http://localhost:8080/api/v1/github/repos \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://github.com/golang/go"}'
 ```
 
 Expected result:
@@ -82,7 +88,7 @@ Expected result:
 - `/rss/1/fetch` returns fetched/inserted/duplicate counts.
 - `/rss/1/fetch-async` returns `202 Accepted` with a `task_id`; it queues a RabbitMQ fetch job for the worker, with in-process fallback if RabbitMQ is unavailable.
 - `/search?q=go` returns Bleve hits with snippets and scores.
-- `/chat` returns an answer plus article citations.
+- `/chat` returns an answer plus article citations, rewritten query, confidence, and no-answer status.
 
 Example response shapes:
 
@@ -131,11 +137,14 @@ A Tailwind user app is served by the gateway at `http://localhost:8080/` and `ht
 | Article Management | Working | List/detail, read history, favorite, read later, archive, delete |
 | Trend Analysis | Working | Hot tags, source counts, and daily article volume over 7/30/90 days |
 | Bleve Search | Working | Title/content/summary/tag/source/date search, boost, filters, highlight |
-| RAG Chat | Basic Working | Retrieves top articles and returns citations |
+| RAG Chat | Working | Query rewrite, citations, confidence score, no-answer guard |
 | WebSocket Events | Working | Emits fetch/index/new article events |
-| Login / GitHub OAuth | Basic Working | Login page, Auth URL, callback, GitHub user upsert |
-| Email Sending | Basic Working | SMTP test mail and daily report delivery |
-| RabbitMQ / etcd | Partial | Real client implementations, service skeletons |
+| Login / GitHub OAuth | Working | Login page, Auth URL, callback, GitHub user upsert, JWT session token |
+| User Preferences | Working | Interested tags, timezone, daily report time/email/enabled |
+| Email Sending | Working | SMTP test mail, manual daily report delivery, scheduled daily report delivery |
+| RabbitMQ / etcd | Working | RabbitMQ async RSS fetch jobs with worker consumer; etcd service discovery hooks |
+| Feed Health | Working | Health score, duration, failures, last error, auto-disable after repeated failures |
+| GitHub Repo Monitor | Working | Stars, open issues, latest release, breaking/security hints |
 | Reddit / Arxiv / YouTube | Stub | Fetcher interface prepared |
 | Kubernetes | Starter | Minimal manifests for deployment shape |
 
@@ -183,6 +192,15 @@ AI_PROVIDER=ollama
 AI_BASE_URL=http://localhost:11434/v1
 AI_MODEL=llama3.1
 ```
+
+Auth hardening:
+
+```env
+JWT_SECRET=change-this-to-a-long-random-string
+JWT_AUTH_REQUIRED=true
+```
+
+GitHub OAuth UI login stores the returned `session_token` in localStorage and sends it as `Authorization: Bearer <token>`.
 
 ## Commands
 
@@ -245,10 +263,10 @@ Read these first when reviewing the project:
 
 ## Known Limitations
 
-- The strongest completed path is RSS/GitHub Releases/Hacker News -> AI -> Search -> RAG. Reddit, Arxiv, and YouTube are intentionally marked as stubs.
-- RabbitMQ and etcd clients are implemented, but the gateway still keeps the MVP path in-process for easy local demo.
-- OAuth has GitHub auth URL, callback, and user upsert. Session cookies/JWT middleware are still planned.
-- Email sending uses SMTP and is disabled until SMTP environment variables are configured.
+- The strongest completed path is RSS/GitHub Releases/Hacker News/GitHub repo monitor -> AI -> Search -> RAG. Reddit, Arxiv, and YouTube are intentionally marked as stubs.
+- RabbitMQ async fetch is implemented; gateway keeps an in-process fallback so local demos still work if RabbitMQ is unavailable.
+- JWT enforcement is opt-in through `JWT_AUTH_REQUIRED=true` so local demo mode remains simple.
+- Email sending and scheduled daily reports require SMTP environment variables.
 - Observability is Prometheus-ready but not a complete tracing stack.
 
 ## Resume Summary
@@ -258,9 +276,9 @@ TechPulse - AI-powered Developer Knowledge Hub
 
 - Built a Go-based developer intelligence platform that collects RSS/Atom technical articles, deduplicates content by URL/content hash, generates AI summaries/tags/embeddings, and stores articles in MySQL.
 - Added GitHub Releases ingestion for open-source project monitoring, mapping release notes into the same AI/search/RAG article pipeline.
-- Implemented GitHub OAuth callback and SMTP email delivery for daily technical reports.
+- Implemented GitHub OAuth callback, JWT session token handling, user preferences, and SMTP email delivery for scheduled daily technical reports.
 - Implemented full-text search with Bleve, including title/content/summary/tag search, field boosting, pagination, filters, and highlight snippets.
 - Designed a modular architecture with gateway, fetcher, parser, AI pipeline, search, RAG, scheduler, and worker modules, prepared for microservice decomposition.
-- Built a RAG chat API that retrieves relevant articles and returns answers with citations and conversation memory.
-- Added Docker Compose environment with MySQL, Redis, RabbitMQ, etcd, MinIO, plus CI checks for build/test/compose validation.
+- Built a RAG chat API that rewrites queries, retrieves relevant articles, returns answers with citations/confidence, and avoids unsupported answers when the knowledge base has no evidence.
+- Added Docker Compose environment with MySQL, Redis, RabbitMQ worker jobs, etcd, MinIO, plus CI checks for build/test/compose validation.
 ```

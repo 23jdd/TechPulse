@@ -54,7 +54,7 @@ func (s *Service) AskWithConversation(ctx context.Context, question string, user
 		return nil, err
 	}
 	confidence := confidenceFromHits(hits)
-	if len(hits) == 0 || confidence < 0.05 {
+	if len(hits) == 0 || hits[0].Score <= 0 {
 		answer := "The knowledge base does not contain enough relevant articles to answer this question yet."
 		if s.memory != nil && conversationID > 0 {
 			_ = s.memory.StoreMessage(ctx, conversationID, "user", question, nil)
@@ -89,10 +89,7 @@ func confidenceFromHits(hits []search.SearchHit) float64 {
 	if top <= 0 {
 		return 0
 	}
-	if top >= 10 {
-		return 1
-	}
-	return top / 10
+	return top / (top + 1)
 }
 
 func citationSnippet(hit search.SearchHit) string {

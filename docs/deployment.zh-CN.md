@@ -15,7 +15,13 @@ GOPROXY=https://goproxy.cn,direct
 ALPINE_MIRROR=https://mirrors.aliyun.com/alpine
 ```
 
-如果不想替换 Alpine 源，可以设置 `ALPINE_MIRROR=`。
+如果不想替换 Alpine 源，可以设置：
+
+```env
+ALPINE_MIRROR=
+```
+
+## Compose 地址配置
 
 使用 Docker Compose 运行时，服务地址必须写 Compose 服务名，不能写 `localhost`：
 
@@ -25,11 +31,49 @@ REDIS_ADDR=redis:6379
 RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
 ETCD_ENDPOINTS=etcd:2379
 MINIO_ENDPOINT=minio:9000
+GATEWAY_INTERNAL_URL=http://gateway:8080
 ```
 
-在容器里，`localhost` 指当前容器自己，不是宿主机，也不是其他服务容器。
+容器里的 `localhost` 指当前容器自己，不是宿主机，也不是其他服务容器。
 
-打开：
+## 常用环境变量
+
+```env
+GATEWAY_PORT=8080
+AI_PROVIDER=mock
+AI_BASE_URL=https://api.openai.com/v1
+AI_API_KEY=
+AI_MODEL=gpt-4o-mini
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+GITHUB_REDIRECT_URL=http://localhost:8080/api/v1/auth/github/callback
+GITHUB_TOKEN=
+JWT_SECRET=change-this-to-a-long-random-string
+JWT_AUTH_REQUIRED=false
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USERNAME=
+SMTP_PASSWORD=
+SMTP_FROM=
+```
+
+开启强鉴权：
+
+```env
+JWT_AUTH_REQUIRED=true
+```
+
+开启 AI：
+
+```env
+AI_PROVIDER=openai
+AI_API_KEY=你的_key
+AI_MODEL=gpt-4o-mini
+```
+
+配置 SMTP 后，测试邮件、手动日报和定时日报才会真正发送。
+
+## 打开页面
 
 ```text
 http://localhost:8080/login
@@ -38,20 +82,30 @@ http://localhost:8080/app
 http://localhost:8080/app/zh
 ```
 
-可选：导入 demo Feed：
+如果你把 `.env` 中 `GATEWAY_PORT=80`，宿主机访问地址变成：
+
+```text
+http://localhost/login
+http://localhost/app/zh
+```
+
+容器内部 gateway 仍然监听 `8080`，这是正常的端口映射。
+
+## 可选：导入 demo Feed
 
 ```bash
 docker compose --profile tools run --rm seed
 ```
 
-查看状态和日志：
+## 查看状态和日志
 
 ```bash
 docker compose ps
 docker compose logs -f gateway
+docker compose logs -f worker
 ```
 
-停止服务：
+## 停止服务
 
 ```bash
 docker compose down
@@ -87,4 +141,4 @@ kubectl apply -f deploy/k8s/namespace.yaml
 kubectl apply -f deploy/k8s/
 ```
 
-这些清单包含 gateway 探针和 Prometheus scrape annotations。生产环境中需要把 demo 密码替换成 Kubernetes Secrets，并为 MySQL 和 Bleve 增加持久化卷。
+这些清单包含 gateway 探针和 Prometheus scrape annotations。生产环境需要把 demo 密码替换成 Kubernetes Secrets，并为 MySQL、Bleve 数据和对象存储增加可靠持久化。

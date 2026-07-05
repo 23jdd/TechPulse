@@ -56,6 +56,9 @@ func (g *Generator) RewriteQuery(ctx context.Context, question string) string {
 	if question == "" {
 		return question
 	}
+	if g.provider.Name() == "mock" {
+		return question
+	}
 	out, err := g.provider.ChatCompletion(ctx, []ai.ChatMessage{
 		{Role: "system", Content: "Rewrite the user's question into one short search query for a technical article knowledge base. Return only the query."},
 		{Role: "user", Content: question},
