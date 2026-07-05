@@ -17,6 +17,7 @@ x-app-env: &app-env
   MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
   MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
   MINIO_BUCKET: ${MINIO_BUCKET:-techpulse}
+  GATEWAY_INTERNAL_URL: ${GATEWAY_INTERNAL_URL:-http://gateway:8080}
   AI_PROVIDER: ${AI_PROVIDER:-mock}
   AI_BASE_URL: ${AI_BASE_URL:-https://api.openai.com/v1}
   AI_API_KEY: ${AI_API_KEY:-}

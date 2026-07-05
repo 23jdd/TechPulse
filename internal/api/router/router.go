@@ -57,6 +57,7 @@ func New(h *handler.Handler, logger *zap.Logger, defaultUserID int64) http.Handl
 		r.Post("/rss/{id}/disable", h.DisableRSS)
 		r.Post("/rss/{id}/test", h.TestRSS)
 		r.Post("/rss/{id}/fetch", h.FetchRSS)
+		r.Post("/rss/{id}/fetch-async", h.FetchRSSAsync)
 		r.Post("/github/releases/fetch", h.FetchGitHubReleases)
 		r.Get("/articles", h.ListArticles)
 		r.Get("/articles/{id}", h.GetArticle)
@@ -89,6 +90,7 @@ func New(h *handler.Handler, logger *zap.Logger, defaultUserID int64) http.Handl
 		r.Post("/email/test", h.SendTestEmail)
 		r.Post("/daily-reports", h.GenerateDailyReport)
 		r.Get("/daily-reports", h.ListDailyReports)
+		r.Get("/tasks/{id}", h.GetTask)
 		r.Get("/dashboard", h.Dashboard)
 	})
 	return r

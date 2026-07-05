@@ -11,7 +11,8 @@ Base URL: `http://localhost:8080`
 - `POST /api/v1/rss/{id}/enable`
 - `POST /api/v1/rss/{id}/disable`
 - `POST /api/v1/rss/{id}/test`
-- `POST /api/v1/rss/{id}/fetch`
+- `POST /api/v1/rss/{id}/fetch` runs a synchronous fetch and returns fetched/inserted/duplicate counts
+- `POST /api/v1/rss/{id}/fetch-async` queues a RabbitMQ fetch job for the worker and returns `202 Accepted` with `task_id`; gateway falls back to an in-process background task if RabbitMQ is unavailable
 - `POST /api/v1/github/releases/fetch` with `{"url":"https://github.com/golang/go"}`
 - `GET /api/v1/articles?tag=Go&source=rss&read=false&favorite=true&archived=false&from=2026-07-01&to=2026-07-04`
 - `GET /api/v1/search?q=go&page=1&page_size=20`
@@ -20,6 +21,7 @@ Base URL: `http://localhost:8080`
 - `POST /api/v1/search/reindex`
 - `POST /api/v1/chat` with `{"question":"What is new in Go?","conversation_id":1}`
 - `GET /api/v1/dashboard`
+- `GET /api/v1/tasks/{id}`
 - `GET /ws`
 
 User features:

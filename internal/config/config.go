@@ -18,6 +18,7 @@ type Config struct {
 	MinIOAccessKey string
 	MinIOSecretKey string
 	MinIOBucket    string
+	GatewayURL     string
 	AIProvider     string
 	AIBaseURL      string
 	AIAPIKey       string
@@ -47,6 +48,7 @@ func Load() Config {
 		MinIOAccessKey: env("MINIO_ACCESS_KEY", "minioadmin"),
 		MinIOSecretKey: env("MINIO_SECRET_KEY", "minioadmin"),
 		MinIOBucket:    env("MINIO_BUCKET", "techpulse"),
+		GatewayURL:     env("GATEWAY_INTERNAL_URL", "http://localhost:8080"),
 		AIProvider:     env("AI_PROVIDER", "mock"),
 		AIBaseURL:      env("AI_BASE_URL", "https://api.openai.com/v1"),
 		AIAPIKey:       env("AI_API_KEY", ""),

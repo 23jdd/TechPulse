@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,6 +19,7 @@ import (
 	"techpulse/internal/observability"
 	"techpulse/internal/queue"
 	"techpulse/internal/storage/mysql"
+	"techpulse/pkg/httpclient"
 )
 
 func main() {
@@ -59,6 +63,7 @@ func runWorker(cfg config.Config, repo *mysql.Repository, logger *zap.Logger) {
 	defer stop()
 	broker := queue.NewRabbitMQ(cfg.RabbitMQURL)
 	defer broker.Close()
+	client := httpclient.New(cfg.RequestTimeout)
 
 	queues := []string{"fetch", "parse", "ai", "index", "daily_report"}
 	for _, queueName := range queues {
@@ -68,7 +73,7 @@ func runWorker(cfg config.Config, repo *mysql.Repository, logger *zap.Logger) {
 		}
 		go func(name string, ch <-chan queue.Message) {
 			for msg := range ch {
-				handleMessage(ctx, broker, repo, logger, name, msg)
+				handleMessage(ctx, cfg, client, broker, repo, logger, name, msg)
 			}
 		}(queueName, messages)
 	}
@@ -77,18 +82,22 @@ func runWorker(cfg config.Config, repo *mysql.Repository, logger *zap.Logger) {
 	os.Exit(0)
 }
 
-func handleMessage(ctx context.Context, broker *queue.RabbitMQ, repo *mysql.Repository, logger *zap.Logger, queueName string, msg queue.Message) {
+func handleMessage(ctx context.Context, cfg config.Config, client *http.Client, broker *queue.RabbitMQ, repo *mysql.Repository, logger *zap.Logger, queueName string, msg queue.Message) {
 	start := time.Now()
 	raw, _ := json.Marshal(msg.Payload)
-	taskID, err := repo.CreateTask(ctx, string(msg.Type), string(raw))
-	if err != nil {
-		logger.Error("create task failed", zap.String("queue", queueName), zap.Error(err))
-		return
+	taskID := payloadInt64(msg.Payload, "task_id")
+	if taskID == 0 {
+		var err error
+		taskID, err = repo.CreateTask(ctx, string(msg.Type), string(raw))
+		if err != nil {
+			logger.Error("create task failed", zap.String("queue", queueName), zap.Error(err))
+			return
+		}
 	}
 	if err := repo.MarkTaskRunning(ctx, taskID); err != nil {
 		logger.Warn("mark task running failed", zap.Int64("task_id", taskID), zap.Error(err))
 	}
-	err = processJob(ctx, queueName, msg)
+	err := processJob(ctx, cfg, client, queueName, msg)
 	if err == nil {
 		_ = repo.MarkTaskSuccess(ctx, taskID)
 		logger.Info("worker job succeeded", zap.Int64("task_id", taskID), zap.String("queue", queueName), zap.String("type", string(msg.Type)), zap.Duration("duration", time.Since(start)))
@@ -112,9 +121,34 @@ func handleMessage(ctx context.Context, broker *queue.RabbitMQ, repo *mysql.Repo
 	logger.Error("worker job failed", zap.Int64("task_id", taskID), zap.String("queue", queueName), zap.Error(err), zap.Duration("duration", time.Since(start)))
 }
 
-func processJob(_ context.Context, _ string, msg queue.Message) error {
+func processJob(ctx context.Context, cfg config.Config, client *http.Client, queueName string, msg queue.Message) error {
 	if force, ok := msg.Payload["force_error"].(bool); ok && force {
 		return fmt.Errorf("forced worker error")
+	}
+	if queueName == "fetch" || msg.Type == queue.FetchJob {
+		return processFetchJob(ctx, cfg, client, msg)
+	}
+	return nil
+}
+
+func processFetchJob(ctx context.Context, cfg config.Config, client *http.Client, msg queue.Message) error {
+	feedID := payloadInt64(msg.Payload, "feed_id")
+	if feedID == 0 {
+		return fmt.Errorf("feed_id is required")
+	}
+	base := strings.TrimRight(cfg.GatewayURL, "/")
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/api/v1/rss/%d/fetch", base, feedID), nil)
+	if err != nil {
+		return err
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
+	if res.StatusCode >= http.StatusBadRequest {
+		return fmt.Errorf("gateway fetch failed: status %d: %s", res.StatusCode, strings.TrimSpace(string(body)))
 	}
 	return nil
 }
@@ -131,6 +165,26 @@ func payloadInt(payload map[string]any, key string) int {
 		return int(v)
 	case float64:
 		return int(v)
+	default:
+		return 0
+	}
+}
+
+func payloadInt64(payload map[string]any, key string) int64 {
+	value, ok := payload[key]
+	if !ok {
+		return 0
+	}
+	switch v := value.(type) {
+	case int:
+		return int64(v)
+	case int64:
+		return v
+	case float64:
+		return int64(v)
+	case json.Number:
+		n, _ := v.Int64()
+		return n
 	default:
 		return 0
 	}

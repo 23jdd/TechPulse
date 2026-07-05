@@ -11,7 +11,9 @@
 - `POST /api/v1/rss/{id}/enable`
 - `POST /api/v1/rss/{id}/disable`
 - `POST /api/v1/rss/{id}/test`
-- `POST /api/v1/rss/{id}/fetch`
+- `POST /api/v1/rss/{id}/fetch` 同步抓取，返回 fetched / inserted / duplicates
+- `POST /api/v1/rss/{id}/fetch-async` 异步抓取，优先投递 RabbitMQ fetch job 给 worker，立即返回 `202 Accepted` 和 `task_id`；RabbitMQ 不可用时 gateway 会回退到进程内后台任务
+- `GET /api/v1/tasks/{id}` 查询异步任务状态
 - `POST /api/v1/github/releases/fetch`，请求体：`{"url":"https://github.com/golang/go"}`
 - `GET /api/v1/articles?tag=Go&source=rss&read=false&favorite=true&archived=false&from=2026-07-01&to=2026-07-04`
 - `GET /api/v1/search?q=go&page=1&page_size=20`

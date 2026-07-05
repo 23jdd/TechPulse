@@ -63,6 +63,7 @@ curl -X POST http://localhost:8080/api/v1/rss \
 
 curl -X POST http://localhost:8080/api/v1/rss/1/test
 curl -X POST http://localhost:8080/api/v1/rss/1/fetch
+curl -X POST http://localhost:8080/api/v1/rss/1/fetch-async
 
 curl "http://localhost:8080/api/v1/search?q=go&tag=Go&source=rss&page=1&page_size=20"
 
@@ -79,6 +80,7 @@ Expected result:
 
 - `/health` returns gateway and Redis status.
 - `/rss/1/fetch` returns fetched/inserted/duplicate counts.
+- `/rss/1/fetch-async` returns `202 Accepted` with a `task_id`; it queues a RabbitMQ fetch job for the worker, with in-process fallback if RabbitMQ is unavailable.
 - `/search?q=go` returns Bleve hits with snippets and scores.
 - `/chat` returns an answer plus article citations.
 

@@ -23,6 +23,7 @@ import (
 	"techpulse/internal/observability"
 	"techpulse/internal/parser"
 	"techpulse/internal/pipeline"
+	"techpulse/internal/queue"
 	"techpulse/internal/rag"
 	"techpulse/internal/search"
 	svc "techpulse/internal/service"
@@ -79,6 +80,8 @@ func main() {
 	engine := search.NewHybridEngine(bleveEngine, provider)
 	hub := ws.NewHub()
 	go hub.Run()
+	broker := queue.NewRabbitMQ(cfg.RabbitMQURL)
+	defer broker.Close()
 
 	fetchSvc := fetcher.NewService(fetcher.NewRegistry(
 		fetcher.NewRSSFetcher(client),
@@ -92,7 +95,7 @@ func main() {
 	duplicateSvc := duplicate.NewService(repo)
 	pipelineSvc := pipeline.NewService(provider)
 	ragSvc := rag.NewService(rag.NewRetriever(engine), rag.NewGenerator(provider)).WithMemory(repo)
-	handler := apihandler.New(repo, fetchSvc, parserSvc, duplicateSvc, pipelineSvc, engine, ragSvc, provider, redisClient, oauth, mailer, hub, logger)
+	handler := apihandler.New(repo, fetchSvc, parserSvc, duplicateSvc, pipelineSvc, engine, ragSvc, provider, redisClient, oauth, mailer, hub, broker, logger)
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.HTTPPort),

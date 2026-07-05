@@ -315,11 +315,32 @@ async function addFeed(event) {
 
 async function fetchFeed(id) {
   try {
-    await request(`/api/v1/rss/${id}/fetch`, { method: "POST" });
-    toast(t("fetched"));
-    await loadArticles();
+    const data = await request(`/api/v1/rss/${id}/fetch-async`, { method: "POST" });
+    toast(`${t("fetchQueued")} #${data.task_id}`);
+    pollTask(data.task_id);
   } catch (err) {
     toast(err.message, true);
+  }
+}
+
+async function pollTask(id) {
+  if (!id) return;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    try {
+      const task = await request(`/api/v1/tasks/${id}`);
+      if (task.status === "success") {
+        toast(t("fetched"));
+        await loadArticles();
+        return;
+      }
+      if (task.status === "failed") {
+        toast(task.error_message || t("failed"), true);
+        return;
+      }
+    } catch (_) {
+      return;
+    }
   }
 }
 

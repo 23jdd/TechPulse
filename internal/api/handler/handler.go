@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -24,6 +25,7 @@ import (
 	"techpulse/internal/opml"
 	"techpulse/internal/parser"
 	"techpulse/internal/pipeline"
+	"techpulse/internal/queue"
 	"techpulse/internal/rag"
 	"techpulse/internal/report"
 	"techpulse/internal/search"
@@ -47,11 +49,12 @@ type Handler struct {
 	oauth     *auth.GitHubOAuth
 	mailer    email.Sender
 	hub       *ws.Hub
+	broker    queue.Broker
 	logger    *zap.Logger
 }
 
-func New(repo *mysql.Repository, fetcher *fetcher.Service, parser *parser.Service, duplicate *duplicate.Service, pipeline *pipeline.Service, search search.SearchEngine, rag *rag.Service, ai ai.Provider, cache *redisstore.Client, oauth *auth.GitHubOAuth, mailer email.Sender, hub *ws.Hub, logger *zap.Logger) *Handler {
-	return &Handler{repo: repo, fetcher: fetcher, parser: parser, duplicate: duplicate, pipeline: pipeline, search: search, rag: rag, ai: ai, cache: cache, oauth: oauth, mailer: mailer, hub: hub, logger: logger}
+func New(repo *mysql.Repository, fetcher *fetcher.Service, parser *parser.Service, duplicate *duplicate.Service, pipeline *pipeline.Service, search search.SearchEngine, rag *rag.Service, ai ai.Provider, cache *redisstore.Client, oauth *auth.GitHubOAuth, mailer email.Sender, hub *ws.Hub, broker queue.Broker, logger *zap.Logger) *Handler {
+	return &Handler{repo: repo, fetcher: fetcher, parser: parser, duplicate: duplicate, pipeline: pipeline, search: search, rag: rag, ai: ai, cache: cache, oauth: oauth, mailer: mailer, hub: hub, broker: broker, logger: logger}
 }
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
@@ -179,8 +182,39 @@ func (h *Handler) setFeedStatus(w http.ResponseWriter, r *http.Request, status s
 }
 
 func (h *Handler) FetchRSS(w http.ResponseWriter, r *http.Request) {
-	result, status := h.fetchFeed(r, idParam(r, "id"))
+	result, status := h.fetchFeedContext(r.Context(), idParam(r, "id"))
 	response.JSON(w, status, result)
+}
+
+func (h *Handler) FetchRSSAsync(w http.ResponseWriter, r *http.Request) {
+	feedID := idParam(r, "id")
+	payload, _ := json.Marshal(response.Envelope{
+		"feed_id":   feedID,
+		"user_id":   middleware.UserID(r),
+		"queued_at": time.Now().Format(time.RFC3339),
+	})
+	taskID, err := h.repo.CreateTask(r.Context(), "rss_fetch", string(payload))
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	msg := queue.Message{Type: queue.FetchJob, Payload: map[string]any{
+		"task_id":   taskID,
+		"feed_id":   feedID,
+		"user_id":   middleware.UserID(r),
+		"queued_at": time.Now().Format(time.RFC3339),
+	}}
+	if h.broker != nil {
+		if err := h.broker.Publish(r.Context(), "fetch", msg); err == nil {
+			response.JSON(w, http.StatusAccepted, response.Envelope{"queued": true, "queue": "fetch", "task_id": taskID, "feed_id": feedID})
+			return
+		} else {
+			h.logger.Warn("rabbitmq publish failed; falling back to in-process fetch", zap.Int64("task_id", taskID), zap.Error(err))
+			_ = h.repo.MarkTaskRetrying(r.Context(), taskID, err.Error())
+		}
+	}
+	go h.runFetchTask(taskID, feedID)
+	response.JSON(w, http.StatusAccepted, response.Envelope{"queued": true, "queue": "in-process", "task_id": taskID, "feed_id": feedID})
 }
 
 func (h *Handler) TestRSS(w http.ResponseWriter, r *http.Request) {
@@ -198,8 +232,7 @@ func (h *Handler) TestRSS(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, status, out)
 }
 
-func (h *Handler) fetchFeed(r *http.Request, feedID int64) (*dto.FetchRSSResponse, int) {
-	ctx := r.Context()
+func (h *Handler) fetchFeedContext(ctx context.Context, feedID int64) (*dto.FetchRSSResponse, int) {
 	feed, err := h.repo.GetFeed(ctx, feedID)
 	if err != nil {
 		return &dto.FetchRSSResponse{FeedID: feedID, Errors: []string{"feed not found"}}, http.StatusNotFound
@@ -213,11 +246,33 @@ func (h *Handler) fetchFeed(r *http.Request, feedID int64) (*dto.FetchRSSRespons
 		h.hub.Broadcast(ws.Event{Type: "task_failed", Message: err.Error(), Time: time.Now()})
 		return &dto.FetchRSSResponse{FeedID: feed.ID, Errors: []string{err.Error()}}, http.StatusBadGateway
 	}
-	inserted, duplicates, errors := h.ingestFetchedItems(r, items)
+	inserted, duplicates, errors := h.ingestFetchedItems(ctx, items)
 	out := &dto.FetchRSSResponse{FeedID: feed.ID, Fetched: len(items), Inserted: inserted, Duplicates: duplicates, Errors: errors}
 	_ = h.repo.MarkFeedFetched(ctx, feed.ID)
 	h.hub.Broadcast(ws.Event{Type: "fetch_finished", Message: feed.URL, Time: time.Now()})
 	return out, http.StatusOK
+}
+
+func (h *Handler) runFetchTask(taskID, feedID int64) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+	if err := h.repo.MarkTaskRunning(ctx, taskID); err != nil {
+		h.logger.Warn("mark fetch task running failed", zap.Int64("task_id", taskID), zap.Error(err))
+	}
+	result, status := h.fetchFeedContext(ctx, feedID)
+	if status >= http.StatusBadRequest {
+		message := strings.Join(result.Errors, "; ")
+		if message == "" {
+			message = "fetch failed"
+		}
+		_ = h.repo.MarkTaskFailed(ctx, taskID, message)
+		return
+	}
+	if len(result.Errors) > 0 && result.Inserted == 0 && result.Fetched > 0 {
+		_ = h.repo.MarkTaskFailed(ctx, taskID, strings.Join(result.Errors, "; "))
+		return
+	}
+	_ = h.repo.MarkTaskSuccess(ctx, taskID)
 }
 
 func (h *Handler) testFeed(r *http.Request, feedID int64, feedURL, title, category string, start time.Time) dto.TestRSSResponse {
@@ -249,7 +304,7 @@ func (h *Handler) FetchGitHubReleases(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	inserted, duplicates, errors := h.ingestFetchedItems(r, items)
+	inserted, duplicates, errors := h.ingestFetchedItems(r.Context(), items)
 	h.hub.Broadcast(ws.Event{Type: "fetch_finished", Message: req.URL, Time: time.Now()})
 	response.JSON(w, http.StatusOK, dto.FetchSourceResponse{
 		SourceType: "github_release",
@@ -261,8 +316,7 @@ func (h *Handler) FetchGitHubReleases(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) ingestFetchedItems(r *http.Request, items []fetcher.FetchedItem) (int, int, []string) {
-	ctx := r.Context()
+func (h *Handler) ingestFetchedItems(ctx context.Context, items []fetcher.FetchedItem) (int, int, []string) {
 	var inserted int
 	var duplicates int
 	var errors []string
@@ -316,7 +370,7 @@ func (h *Handler) ingestFetchedItems(r *http.Request, items []fetcher.FetchedIte
 			continue
 		}
 		inserted++
-		h.deleteCache(r, "dashboard:v1", "articles:list:page:1:size:20")
+		h.deleteCacheContext(ctx, "dashboard:v1", "articles:list:page:1:size:20")
 		h.hub.Broadcast(ws.Event{Type: "new_article", Message: enriched.Article.Title, ArticleID: articleID, Time: time.Now()})
 		h.hub.Broadcast(ws.Event{Type: "index_finished", Message: enriched.Article.Title, ArticleID: articleID, Time: time.Now()})
 	}
@@ -837,6 +891,15 @@ func (h *Handler) ListDailyReports(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, response.Envelope{"items": reports})
 }
 
+func (h *Handler) GetTask(w http.ResponseWriter, r *http.Request) {
+	task, err := h.repo.GetTask(r.Context(), idParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusNotFound, "task not found")
+		return
+	}
+	response.JSON(w, http.StatusOK, task)
+}
+
 func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	var cached mysql.Dashboard
 	if h.getCache(r, "dashboard:v1", &cached) {
@@ -934,10 +997,14 @@ func (h *Handler) setCache(r *http.Request, key string, value any, ttl time.Dura
 }
 
 func (h *Handler) deleteCache(r *http.Request, keys ...string) {
+	h.deleteCacheContext(r.Context(), keys...)
+}
+
+func (h *Handler) deleteCacheContext(ctx context.Context, keys ...string) {
 	if h.cache == nil {
 		return
 	}
-	if err := h.cache.Delete(r.Context(), keys...); err != nil {
+	if err := h.cache.Delete(ctx, keys...); err != nil {
 		h.logger.Debug("redis delete failed", zap.Strings("keys", keys), zap.Error(err))
 	}
 }

@@ -480,6 +480,14 @@ func (r *Repository) CreateTask(ctx context.Context, typ, payload string) (int64
 	return res.LastInsertId()
 }
 
+func (r *Repository) GetTask(ctx context.Context, id int64) (*model.Task, error) {
+	var task model.Task
+	if err := r.db.GetContext(ctx, &task, `SELECT * FROM tasks WHERE id = ?`, id); err != nil {
+		return nil, err
+	}
+	return &task, nil
+}
+
 func (r *Repository) MarkTaskRunning(ctx context.Context, id int64) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE tasks SET status = 'running', started_at = NOW(), updated_at = NOW() WHERE id = ?`, id)
 	return err
